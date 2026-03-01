@@ -1,8 +1,8 @@
-import readline from "readline-sync";
+import readline from "readline"
 interface IState {
 	enter(): void;
 	exit(): void;
-	update(manager: StateManager): void;
+	update(manager: StateManager, keyHandler : KeyEventHandler): void;
 	render(renderer: Renderer): void;
 }
 
@@ -97,7 +97,7 @@ abstract class Game extends StateManager implements IState{
 
 	abstract enter(): void;
 	abstract exit(): void;
-	abstract update(manager: StateManager): void;
+	abstract update(manager: StateManager, keyHandler : KeyEventHandler): void;
 	abstract render(renderer: Renderer): void;
 
 	public getName(): string {return this.name;}
@@ -117,10 +117,8 @@ class InfoScreen implements IState {
 	public exit(): void {console.log("Exiting InfoScreen")}
 
 	public update(manager: StateManager): void {
-		if(readline.question("Continue? (y/n): ") === "y"){
-			manager.exitState();
-		}
 	}
+
 	public render(renderer: Renderer): void {
 		console.log(this.title);
 		for(const [name, num] of this.info) {
@@ -140,13 +138,13 @@ class GuessTheNumber extends Game {
 	public enter(): void {console.log("Entering GuessTheNumber")}
 	public exit(): void {console.log("Exiting GuessTheNumber")}
 
-	public update(manager: StateManager): void {
+	public update(manager: StateManager, keyHandler : KeyEventHandler): void {
 		const currentState: IState | undefined = this.getCurrentState();
 		if(!currentState){
 			manager.exitState();
 			return;
 		}
-		currentState.update(this);
+		currentState.update(this, keyHandler);
 	}
 	public render(renderer: Renderer): void {
 		this.getCurrentState()?.render(renderer);
@@ -154,7 +152,9 @@ class GuessTheNumber extends Game {
 }
 
 class Casino implements IState {
+	private gui: string = "";
 	private gamblers: Gambler[];
+	private y: number = 0;
 	
 	public constructor() {
 		this.gamblers = [new StableGambler("Bob", 10, 5)]
@@ -168,106 +168,171 @@ class Casino implements IState {
 		console.log("Exiting Casino");
 	}
 
-	public update(manager: StateManager): void {
-		if(readline.question("Start simulation? (y/n): ") == "y"){
-			manager.enterState(new GuessTheNumber(this.gamblers));
-		}else {
-			manager.exitState();
-		}
+	public update(manager: StateManager, keyHandler : KeyEventHandler): void {
 	}
 
 	public render(renderer: Renderer): void {
-		renderer.clearBuffer();
+		this.y += 1;
+		renderer.draw(10,5,"Hello!\nWorld!");
 	}
 }
 
 
 class Application extends StateManager {
+	private static FPS = 5;
+	private static MSPF = 1000 / this.FPS;
+
 	private renderer: Renderer;
+	private keyHandler: KeyEventHandler;
 
 	public constructor() {
 		super();
-		this. renderer = new Renderer(50,10,50,1);
+		this.renderer = new Renderer(50,10,50,1);
+		this.keyHandler = new KeyEventHandler();
+
+		if(!process.stdin.isTTY) {
+			throw new Error("Cannot run in a non-TTY console");
+		}
+		
+		readline.emitKeypressEvents(process.stdin)
+		process.stdin.setRawMode(true);
+		process.stdin.resume();
+		process.stdin.on("keypress", (str, key) => {
+			this.keyHandler.handle(str,key);
+		})
+		
+
 		this.enterState(new Casino());
 	}
 
 	public start(): void {
 		let currentState: IState | undefined = this.getCurrentState();
-		while(currentState) {
-			this.renderer.clearBuffer();
-			this.renderer.clearScreen();
+		const loop = () => {
+			if(currentState == undefined) return;
+	
+			this.renderer.clear();
 			currentState.render(this.renderer);
 			this.renderer.show();
+			currentState.update(this, this.keyHandler);
 
-			currentState.update(this);
 			currentState = this.getCurrentState();
+			
+			// Loop again after events are handled.
+			setTimeout(loop, Application.MSPF);
 		}
 		
+		loop();
+	}
+
+
+
+}
+
+type Key = readline.Key;
+
+class KeyEventHandler {
+	private wasPressed: Set<string>;
+
+	constructor() {
+		this.wasPressed = new Set();
+	}
+
+	public handle(str: string, key: Key): void {
+		if(key.ctrl && key.name === "c") process.exit();
+		this.wasPressed.add(str);
+	}
+
+	public keyPressed(key: string){
+		return this.wasPressed.has(key);
 	}
 
 }
 
-class Renderer {
+
+class Buffer {
 	private width: number;
 	private height: number;
-	private debugWidth: number;
 	private debugHeight: number;
-	private buffer: string[][];
+	private debugWidth: number;
+	private totalWidth: number;
+	private totalHeight: number;
+
+	private pixels: string[][];
 
 	public constructor(width: number, height: number, debugWidth: number = 0, debugHeight: number = 0){
 		this.width = width;
 		this.height = height;
-		this.debugWidth = debugWidth;
 		this.debugHeight = debugHeight;
-		this.buffer = [];
-		for(let y = 0; y < this.height + this.debugHeight;  y++){
-			this.buffer.push([]);
-			for(let x = 0; x < this.width + this.debugWidth; x++){
-				this.buffer[y].push("");
+		this.debugWidth = debugWidth;
+
+		this.totalWidth = this.width + this.debugWidth;
+		this.totalHeight = this.height + this.debugHeight;
+
+		this.pixels = [];
+
+		this.clear();
+	}
+
+
+	public toString(): string {
+		return this.pixels.map((s) => s.join("")).join("\n");
+	}
+	
+	public clear(): void {
+		this.pixels = [];
+		for(let y = 0; y < this.totalHeight;  y++){
+			this.pixels.push([]);
+			for(let x = 0; x < this.totalWidth; x++){
+				this.pixels[y].push(" ");
 			}
 		}
 	}
 
-	public draw(x: number, y: number, str: string): void {
+	public setPixel(x: number, y: number, char: string, boundsX: number, boundsY: number): void {
+		if(x > this.totalWidth || y > this.totalHeight || x > boundsX || y > boundsY) return;
+		this.pixels[y][x] = char;
+	}
+
+	public getMainRegionDim(): [number, number] {return [this.width, this.height];}
+	public getDebugRegionDim(): [number, number] {return [this.debugWidth, this.debugHeight];}
+	public getTotalDim(): [number, number] {return [this.totalWidth, this.totalHeight];}
+
+}
+class Renderer {
+	private buffer: Buffer;
+
+	public constructor(width: number, height: number, debugWidth: number = 0, debugHeight: number = 0){
+		this.buffer = new Buffer(width, height, debugWidth, debugHeight);
+	}
+
+	private drawToRegion(offsetX: number, offsetY: number, regionWidth: number, regionHeight: number, x: number, y: number, str: string) {
 		const chars: string[][] = str.split("\n").map((s) => s.split(""));
-		
-		for(let row = 0; row < chars.length && y + row < this.height; row++) {
-			if(y + row > this.height) break;
-			for(let col = 0; col < chars[row].length && x + col < this.width; col++){
-				if(x + col > this.width) break;
-				this.buffer[y + row][x + col] = chars[row][col];
+		//TO-DO: Optimize this for early stop if we overrun the buffer
+		for(let row = 0; row < chars.length; row++) {
+			for(let col = 0; col < chars[row].length; col++){
+				this.buffer.setPixel(x + col + offsetX, y + row + offsetY, chars[row][col], offsetX + regionWidth, offsetY + regionHeight);
 			}
 		}
+	}
+	public draw(x: number, y: number, str: string): void {
+		const [width, height] = this.buffer.getMainRegionDim();
+		this.drawToRegion(0,0,width, height, x, y, str);
 	}
 
 	public drawDebug(x: number, y: number, str: string): void {
-		const chars: string[][] = str.split("\n").map((s) => s.split(""));
-		
-		for(let row = 0; row < chars.length && y + row < this.debugHeight; row++) {
-			if(y + row > this.height) break;
-			for(let col = 0; col < chars[row].length && x + col < this.debugWidth; col++){
-				if(x + col > this.width) break;
-				this.buffer[y + row + this.height][x + col + this.width] = chars[row][col];
-			}
-		}
+		const [width, height] = this.buffer.getMainRegionDim();
+		const [debugHeight, debugWidth] = this.buffer.getDebugRegionDim();
+
+		this.drawToRegion(width, height, width, height, x, y, str);
 	}
 
 	public show(): void { 
-		const str: string = this.buffer.map((s) => s.join("")).join("\n");
-		console.log(str);
+		console.log(this.buffer.toString());
 	}
-	public clearBuffer(): void {
-		this.buffer = [];
-		for(let y = 0; y < this.height;  y++){
-			this.buffer.push([]);
-			for(let x = 0; x < this.width; x++){
-				this.buffer[y].push("");
-			}
-		}
-	}
-
-	public clearScreen(): void {
+	
+	public clear(): void {
 		console.clear();
+		this.buffer.clear();
 	}
 }
 
