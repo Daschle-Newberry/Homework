@@ -1,135 +1,61 @@
 import readline from "readline-sync";
-
-interface IStateManager{
-	enterState(state: IState): void;
-	replaceState(state: IState): void;
-	exitState(): void;
-}
-
 interface IState {
 	enter(): void;
 	exit(): void;
-	update(manager: IStateManager): void;
+	update(manager: StateManager): void;
 	render(renderer: Renderer): void;
 }
 
 abstract class Gambler {
-	//TO-DO: implement me
-}
+	private name: string;
+	private money: number;
 
-//Abstract class for handling Game logic, is also a state
-abstract class Game implements IStateManager, IState{
-	protected abstract currentState: IState;
+	private target: number;
 
-	protected name: string;
-	protected book: Map<Gambler, number>;
-	protected shouldExit: boolean;
-
-	constructor(name: string) {
+	public constructor(name: string, money: number, target: number){
 		this.name = name;
-		this.book = new Map();
-		this.shouldExit = false;
+		this.money = money;
+		this.target = target;
 	}
 
-	abstract enter(): void;
-	abstract exit(): void;
-	abstract update(manager: IStateManager): void;
-	abstract render(renderer: Renderer): void;
-
-	public enterState(state: IState): void{
-		this.currentState = state;
+	public hitTarget(): boolean {
+		return this.money === this.target;
 	}
 
-	//Same as enterState since game doesn't use a stack for states
-	public replaceState(state: IState): void{
-		this.currentState = state;
+	public isBankrupt(): boolean {
+		return this.money >= 0;
 	}
 
-	//Flags game to exit.
-	public exitState(): void {
-		this.shouldExit = true;
-	}
-}
-
-class Betting implements IState {
-	public enter(): void {console.log("Entering Betting")}
-	public exit(): void {console.log("Exiting Betting")}
-	public update(manager: IStateManager): void {
-		console.log("Updating Betting")
-		manager.exitState();
-	}
-	public render(renderer: Renderer): void {
-		renderer.clearBuffer();
-	}
-}
-
-class TailsIWin extends Game {
-	protected currentState: IState;
-
-
-	constructor() {
-		super("TailsIWin");
-		this.currentState = new Betting();
-		this.currentState.enter();
+	public isFinished(): boolean {
+		return this.hitTarget() || this.isBankrupt();
 	}
 
-	public enter(): void {console.log("Entering TailsIWin")}
-	public exit(): void {console.log("Exiting TailsIWin")}
-	public update(manager: IStateManager): void {
-		if(this.shouldExit){
-			manager.exitState();
-			return;
-		}
-		this.currentState.update(this);
-	}
-	public render(renderer: Renderer): void {
-		renderer.clearBuffer();
-	}
-}
-
-class Casino implements IState {
+	public abstract getBet(): number;
+	public getName(): string {return this.name;}
+	public getMoney(): number {return this.money;}
+	public getTarget(): number {return this.target;}
 	
-	constructor() {
-	}
-
- 	public enter(): void {
-		console.log("Entering Casino");
- 	}
-
-	public exit(): void {
-		console.log("Exiting Casino");
-	}
-
-	public update(manager: IStateManager): void {
-		if(readline.question("Start simulation? (y/n): ") == "y"){
-			manager.enterState(new TailsIWin());
-		}else {
-			manager.exitState();
-		}
-	}
-
-	public render(renderer: Renderer): void {
-		renderer.clearBuffer();
-	}
 }
 
 
-class Application implements IStateManager {
-	private stateStack: IState[];
-	private renderer: Renderer;
+class StableGambler extends Gambler {
+	private bet: number;
 
-	constructor() {
-		this.stateStack = [];
-		this. renderer = new Renderer(60,60);
-		this.enterState(new Casino());
+	public constructor(name: string, money: number, bet: number) {
+		super(name,money,bet * 2);
+		this.bet = bet;
 	}
 
-	public start(): void {
-		while(this.stateStack.length > 0) {
-			const current = this.stateStack[this.stateStack.length - 1];
-			current.render(this.renderer);
-			current.update(this);
-		}
+	public getBet(): number {
+		return Math.max(this.bet, this.getMoney());
+	}
+}
+
+class StateManager {
+	private stateStack: IState[];
+
+	protected constructor() {
+		this.stateStack = [];
 	}
 
 	public enterState(state: IState): void {
@@ -149,6 +75,132 @@ class Application implements IStateManager {
 			this.stateStack[this.stateStack.length - 1].enter();
 		}
 	}
+
+	public getCurrentState(): IState | undefined {
+		if(this.stateStack.length === 0) return undefined;
+		return this.stateStack[this.stateStack.length - 1];
+	}
+}
+
+//Abstract class for handling Game logic, is also a state
+abstract class Game implements IState{
+	//Abstract so the typescript is upset that we don't initialize it in Game's constructor
+	private name: string;
+	private book: Map<Gambler, number>;
+	private players: Gambler[];
+
+	public constructor(name: string, players: Gambler[]) {
+		this.name = name;
+		this.players = players;
+		this.book = new Map();
+	}
+
+	abstract enter(): void;
+	abstract exit(): void;
+	abstract update(manager: StateManager): void;
+	abstract render(renderer: Renderer): void;
+
+	public getName(): string {return this.name;}
+	public getBook(): Map<Gambler, number> {return this.book;}	
+}
+
+class InfoScreen implements IState {
+	private info : string;
+	private title: string;
+
+	public constructor(title: string, info: string) {
+		this.info = info;
+		this.title = title;
+	}
+
+	public enter(): void {console.log("Entering InfoScreen")}
+	public exit(): void {console.log("Exiting InfoScreen")}
+
+	public update(manager: StateManager): void {
+		if(readline.question("Continue? (y/n): ") === "y"){
+			manager.exitState();
+		}
+	}
+	public render(renderer: Renderer): void {
+		console.log(this.title);
+		for(const [name, num] of this.info) {
+			console.log(`${name}: ${num}`)
+		}
+	}
+}
+
+class GuessTheNumber extends Game {
+	public constructor(players: Gambler[]) {
+		super("GuessTheNumber", players);
+
+		let info = ""
+		for(const [gambler, bet] of this.getBook()) info += `${gambler}: $${bet}\n`
+
+
+	}
+
+	public enter(): void {console.log("Entering GuessTheNumber")}
+	public exit(): void {console.log("Exiting GuessTheNumber")}
+
+	public update(manager: StateManager): void {
+		const currentState: IState | undefined = this.getCurrentState();
+		if(!currentState){
+			manager.exitState();
+			return;
+		}
+		currentState.update(this);
+	}
+	public render(renderer: Renderer): void {
+		renderer.clearBuffer();
+	}
+}
+
+class Casino implements IState {
+	private gamblers: Gambler[];
+	
+	public constructor() {
+		this.gamblers = [new StableGambler("Bob", 10, 5)]
+	}
+
+ 	public enter(): void {
+		console.log("Entering Casino");
+ 	}
+
+	public exit(): void {
+		console.log("Exiting Casino");
+	}
+
+	public update(manager: StateManager): void {
+		if(readline.question("Start simulation? (y/n): ") == "y"){
+			manager.enterState(new GuessTheNumber(this.gamblers));
+		}else {
+			manager.exitState();
+		}
+	}
+
+	public render(renderer: Renderer): void {
+		renderer.clearBuffer();
+	}
+}
+
+
+class Application extends StateManager {
+	private renderer: Renderer;
+
+	public constructor() {
+		super();
+		this. renderer = new Renderer(60,60);
+		this.enterState(new Casino());
+	}
+
+	public start(): void {
+		let currentState: IState | undefined = this.getCurrentState();
+		while(currentState) {
+			currentState.render(this.renderer);
+			currentState.update(this);
+		}
+	}
+
 }
 
 class Renderer {
@@ -156,7 +208,7 @@ class Renderer {
 	private height: number;
 	private buffer: string[][];
 
-	constructor(width: number, height: number){
+	public constructor(width: number, height: number){
 		this.width = width;
 		this.height = height;
 		this.buffer = [];
@@ -225,3 +277,28 @@ new Application().start();
 //					-> If a state wants to change the state of the FSM, they will request it via the passed manager
 //					-> Game states which are also FSM/State mangers will extend the manager class
 //
+
+// If games are NOT state machines, they will keep their state on the application state stack
+//
+//[BOTTOM] Casino -> ResultsG1 -> PlayingG1 -> PlacingBetsG1 -> ResultsG2 -> PlayingG2 -> PlacingBetsG2 -> .... [TOP]
+
+//Each game will lead into the next, each state will "own" the players, allowing the state to update the players.
+//
+//Can factor out ResutlsG_ and PlacingBetsG_ with InfoScreen
+//[BOTTOM] Casino -> InfoScreen -> PlayingG1 -> InfoScreen -> InfoScreen -> PlayingG2 -> InfoScreen -> .... [TOP]
+
+//But then Casino has to manage info screens for each game, which will make casino have game logic.
+
+//If games ARE state machines, they  can keep their internal state on their own stack
+//[BOTTOM] Casino -> G1 		-> 									G2 ->  .... [TOP]
+// 					  |-> InfoScreen -> Playing -> InfoScreen		|-> InfoScreen -> Playing -> InfoScreen
+//
+// Since an infoscreen or playing state will not be returned, we can use a simple state machine without a stack
+////[BOTTOM] Casino -> G1 		-> 									G2 ->  .... [TOP]
+//						|-> currentState: InfoScreen | Playing		|-> currentState: InfoScreen | Playing
+//
+// Requires an extra class which owns its substates, but fixes the issue of the casino needing to manage game logic.
+//
+// Or we can have each Game handle its logic internalling, with no extra states
+//[BOTTOM] Casino -> G1 -> G2 ->  .... [TOP]
+// This is WAY messier though, requires a lot of switch statements.
