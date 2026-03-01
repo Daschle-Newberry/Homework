@@ -37,7 +37,6 @@ abstract class Gambler {
 	
 }
 
-
 class StableGambler extends Gambler {
 	private bet: number;
 
@@ -83,13 +82,14 @@ class StateManager {
 }
 
 //Abstract class for handling Game logic, is also a state
-abstract class Game implements IState{
+abstract class Game extends StateManager implements IState{
 	//Abstract so the typescript is upset that we don't initialize it in Game's constructor
 	private name: string;
 	private book: Map<Gambler, number>;
 	private players: Gambler[];
 
 	public constructor(name: string, players: Gambler[]) {
+		super();
 		this.name = name;
 		this.players = players;
 		this.book = new Map();
@@ -132,11 +132,9 @@ class InfoScreen implements IState {
 class GuessTheNumber extends Game {
 	public constructor(players: Gambler[]) {
 		super("GuessTheNumber", players);
-
 		let info = ""
 		for(const [gambler, bet] of this.getBook()) info += `${gambler}: $${bet}\n`
-
-
+		this.enterState(new InfoScreen("Bets: \n",info));
 	}
 
 	public enter(): void {console.log("Entering GuessTheNumber")}
@@ -151,7 +149,7 @@ class GuessTheNumber extends Game {
 		currentState.update(this);
 	}
 	public render(renderer: Renderer): void {
-		renderer.clearBuffer();
+		this.getCurrentState()?.render(renderer);
 	}
 }
 
@@ -189,16 +187,22 @@ class Application extends StateManager {
 
 	public constructor() {
 		super();
-		this. renderer = new Renderer(60,60);
+		this. renderer = new Renderer(50,10,50,1);
 		this.enterState(new Casino());
 	}
 
 	public start(): void {
 		let currentState: IState | undefined = this.getCurrentState();
 		while(currentState) {
+			this.renderer.clearBuffer();
+			this.renderer.clearScreen();
 			currentState.render(this.renderer);
+			this.renderer.show();
+
 			currentState.update(this);
+			currentState = this.getCurrentState();
 		}
+		
 	}
 
 }
@@ -206,15 +210,19 @@ class Application extends StateManager {
 class Renderer {
 	private width: number;
 	private height: number;
+	private debugWidth: number;
+	private debugHeight: number;
 	private buffer: string[][];
 
-	public constructor(width: number, height: number){
+	public constructor(width: number, height: number, debugWidth: number = 0, debugHeight: number = 0){
 		this.width = width;
 		this.height = height;
+		this.debugWidth = debugWidth;
+		this.debugHeight = debugHeight;
 		this.buffer = [];
-		for(let y = 0; y < this.height;  y++){
+		for(let y = 0; y < this.height + this.debugHeight;  y++){
 			this.buffer.push([]);
-			for(let x = 0; x < this.width; x++){
+			for(let x = 0; x < this.width + this.debugWidth; x++){
 				this.buffer[y].push("");
 			}
 		}
@@ -228,6 +236,18 @@ class Renderer {
 			for(let col = 0; col < chars[row].length && x + col < this.width; col++){
 				if(x + col > this.width) break;
 				this.buffer[y + row][x + col] = chars[row][col];
+			}
+		}
+	}
+
+	public drawDebug(x: number, y: number, str: string): void {
+		const chars: string[][] = str.split("\n").map((s) => s.split(""));
+		
+		for(let row = 0; row < chars.length && y + row < this.debugHeight; row++) {
+			if(y + row > this.height) break;
+			for(let col = 0; col < chars[row].length && x + col < this.debugWidth; col++){
+				if(x + col > this.width) break;
+				this.buffer[y + row + this.height][x + col + this.width] = chars[row][col];
 			}
 		}
 	}
@@ -299,6 +319,6 @@ new Application().start();
 //
 // Requires an extra class which owns its substates, but fixes the issue of the casino needing to manage game logic.
 //
-// Or we can have each Game handle its logic internalling, with no extra states
+// Or we can have each Game handle its logic internally, with no extra states
 //[BOTTOM] Casino -> G1 -> G2 ->  .... [TOP]
 // This is WAY messier though, requires a lot of switch statements.
