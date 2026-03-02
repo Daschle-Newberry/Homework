@@ -1,4 +1,6 @@
 import readline from "readline"
+import fs from "fs"
+
 interface IState {
 	enter(): void;
 	exit(): void;
@@ -152,12 +154,13 @@ class GuessTheNumber extends Game {
 }
 
 class Casino implements IState {
-	private gui: string = "";
+	private tui: Tui;
 	private gamblers: Gambler[];
 	private y: number = 0;
 	
 	public constructor() {
 		this.gamblers = [new StableGambler("Bob", 10, 5)]
+		this.tui = new Tui("tui.json","casino");
 	}
 
  	public enter(): void {
@@ -172,22 +175,99 @@ class Casino implements IState {
 	}
 
 	public render(renderer: Renderer): void {
-		this.y += 1;
-		renderer.draw(10,5,"Hello!\nWorld!");
+		this.tui.getComponents().forEach(component => {
+			renderer.draw(component.getX(),component.getY(),component.toString());
+		});
 	}
 }
+interface TuiSpecification {
+	type: string;
+	x: number | string;
+	y: number | string;
+	formatting: string;
+	visual: string[];
+}
+
+class TuiComponent {
+	private x: number;
+	private y: number;
+	private formatting: string;
+	private visual: string[];
+
+	//         1
+	//00000000000000000000
+	constructor(spec: TuiSpecification) {
+		this.formatting = spec.formatting;
+		this.visual = spec.visual;
+
+		let maxLineLength: number = Math.max(...this.visual.map((str) => str.length));
+		this.visual = this.visual.map((str) => str + " ".repeat(maxLineLength - str.length));
+
+		if(typeof spec.x === "string") {
+			if(spec.x === "center") {
+				this.x = Math.ceil((Application.width - maxLineLength) / 2);
+				console.log(this.x);
+			} else {
+				throw new Error(`Unknown alignment type "${spec.x}"`);
+			}
+		}else {
+			this.x = spec.x;
+		}
+
+		if(typeof spec.y === "string") {
+			if(spec.y === "center") {
+				this.y = Math.ceil((Application.height - this.visual.length) / 2);
+			} else {
+				throw new Error(`Unknown alignment type "${spec.y}"`);
+			}
+		}else {
+			this.y = spec.y;
+		}
+
+	}
+
+	public toString(): string {
+		return(
+			this.visual
+			.map(line => `${this.formatting}${line}\u001b[0m`)
+			.join("\n")
+			)
+	}
+
+	public getX(): number {return this.x}
+	public getY(): number {return this.y}
 
 
+}
+
+class Tui {
+	private components: TuiComponent[];
+
+	constructor(file: string, state: string) {
+		const tuiJSON: any = JSON.parse(fs.readFileSync("tui.json","utf-8"));
+		this.components = tuiJSON[state].map((spec: TuiSpecification) => new TuiComponent(spec));
+	}
+
+	public addComponenet(component: TuiComponent): void {
+		this.components.push(component);
+	}
+	public getComponents(): TuiComponent[] {
+		return this.components;
+	}
+
+}
 class Application extends StateManager {
 	private static FPS = 5;
 	private static MSPF = 1000 / this.FPS;
+	public static height = 10;
+	public static width = 10;
 
 	private renderer: Renderer;
 	private keyHandler: KeyEventHandler;
 
 	public constructor() {
 		super();
-		this.renderer = new Renderer(50,10,50,1);
+		this.renderer = new Renderer(Application.width,Application.height);
 		this.keyHandler = new KeyEventHandler();
 
 		if(!process.stdin.isTTY) {
@@ -212,10 +292,11 @@ class Application extends StateManager {
 	
 			this.renderer.clear();
 			currentState.render(this.renderer);
+			// this.renderer.draw(0,0,"Hello!");
 			this.renderer.show();
-			currentState.update(this, this.keyHandler);
+			// currentState.update(this, this.keyHandler);
 
-			currentState = this.getCurrentState();
+			// currentState = this.getCurrentState();
 			
 			// Loop again after events are handled.
 			setTimeout(loop, Application.MSPF);
@@ -252,21 +333,13 @@ class KeyEventHandler {
 class Buffer {
 	private width: number;
 	private height: number;
-	private debugHeight: number;
-	private debugWidth: number;
-	private totalWidth: number;
-	private totalHeight: number;
-
 	private pixels: string[][];
 
-	public constructor(width: number, height: number, debugWidth: number = 0, debugHeight: number = 0){
+	public constructor(width: number, height: number){
 		this.width = width;
 		this.height = height;
-		this.debugHeight = debugHeight;
-		this.debugWidth = debugWidth;
 
-		this.totalWidth = this.width + this.debugWidth;
-		this.totalHeight = this.height + this.debugHeight;
+		
 
 		this.pixels = [];
 
@@ -280,50 +353,58 @@ class Buffer {
 	
 	public clear(): void {
 		this.pixels = [];
-		for(let y = 0; y < this.totalHeight;  y++){
+		for(let y = 0; y < this.height;  y++){
 			this.pixels.push([]);
-			for(let x = 0; x < this.totalWidth; x++){
+			for(let x = 0; x < this.width; x++){
 				this.pixels[y].push(" ");
 			}
 		}
 	}
 
-	public setPixel(x: number, y: number, char: string, boundsX: number, boundsY: number): void {
-		if(x > this.totalWidth || y > this.totalHeight || x > boundsX || y > boundsY) return;
+	public setPixel(x: number, 
+					y: number, 
+					char: string, 
+					): void {
+		if(x < 0 || x > this.width) return;
+		if(y < 0 || y > this.height) return;
 		this.pixels[y][x] = char;
 	}
 
-	public getMainRegionDim(): [number, number] {return [this.width, this.height];}
-	public getDebugRegionDim(): [number, number] {return [this.debugWidth, this.debugHeight];}
-	public getTotalDim(): [number, number] {return [this.totalWidth, this.totalHeight];}
+	public getDim(): [number, number] {return [this.width, this.height];}
+
 
 }
 class Renderer {
+	// NEED TO FIX STORAGE FOR ESCAPE SEQUENCES IN STRINGS 
 	private buffer: Buffer;
 
-	public constructor(width: number, height: number, debugWidth: number = 0, debugHeight: number = 0){
-		this.buffer = new Buffer(width, height, debugWidth, debugHeight);
+	public constructor(width: number, height: number){
+		this.buffer = new Buffer(width, height);
 	}
 
-	private drawToRegion(offsetX: number, offsetY: number, regionWidth: number, regionHeight: number, x: number, y: number, str: string) {
+	private drawToRegion(x: number, 
+						 y: number, 
+						 str: string
+						): void {``
 		const chars: string[][] = str.split("\n").map((s) => s.split(""));
 		//TO-DO: Optimize this for early stop if we overrun the buffer
 		for(let row = 0; row < chars.length; row++) {
 			for(let col = 0; col < chars[row].length; col++){
-				this.buffer.setPixel(x + col + offsetX, y + row + offsetY, chars[row][col], offsetX + regionWidth, offsetY + regionHeight);
+				this.buffer.setPixel(
+					x + col, 
+					y + row,
+					chars[row][col]
+				);
 			}
 		}
 	}
 	public draw(x: number, y: number, str: string): void {
-		const [width, height] = this.buffer.getMainRegionDim();
-		this.drawToRegion(0,0,width, height, x, y, str);
+		this.drawToRegion(x, y, str);
 	}
 
 	public drawDebug(x: number, y: number, str: string): void {
-		const [width, height] = this.buffer.getMainRegionDim();
-		const [debugHeight, debugWidth] = this.buffer.getDebugRegionDim();
-
-		this.drawToRegion(width, height, width, height, x, y, str);
+		//TO-DO: Add debug buffer or debug regions in main buffer
+		throw new Error("Debug Drawing is not Implmented!")
 	}
 
 	public show(): void { 
@@ -365,7 +446,7 @@ new Application().start();
 
 // If games are NOT state machines, they will keep their state on the application state stack
 //
-//[BOTTOM] Casino -> ResultsG1 -> PlayingG1 -> PlacingBetsG1 -> ResultsG2 -> PlayingG2 -> PlacingBetsG2 -> .... [TOP]
+//[BOTTOM] Casino -> ResultsG1 -> PlayingG1 -> PlacingBetsGG1 -> ResultsG2 -> PlayingG2 -> PlacingBetsG2 -> .... [TOP]
 
 //Each game will lead into the next, each state will "own" the players, allowing the state to update the players.
 //
