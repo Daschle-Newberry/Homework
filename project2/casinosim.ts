@@ -130,43 +130,60 @@ class InfoScreen implements IState {
 }
 
 class GuessTheNumber extends Game {
+	private tui: Tui;
+	private gamblers: Gambler[];
+
 	public constructor(players: Gambler[]) {
 		super("GuessTheNumber", players);
-		let info = ""
-		for(const [gambler, bet] of this.getBook()) info += `${gambler}: $${bet}\n`
-		this.enterState(new InfoScreen("Bets: \n",info));
+		this.gamblers = players;
+
+		this.tui = new Tui("tui.json","guessthenumber",new Map());
 	}
 
-	public enter(): void {console.log("Entering GuessTheNumber")}
-	public exit(): void {console.log("Exiting GuessTheNumber")}
+	public enter(): void {}
+	public exit(): void {}
 
 	public update(manager: StateManager, keyHandler : KeyEventHandler): void {
-		const currentState: IState | undefined = this.getCurrentState();
-		if(!currentState){
-			manager.exitState();
-			return;
-		}
-		currentState.update(this, keyHandler);
+
 	}
 	public render(renderer: Renderer): void {
-		this.getCurrentState()?.render(renderer);
-	}
+		const args: Map<string, string | string[]> = new Map();
+		let names: string[] = [];
+		let bets: string[] = [];
+
+		args.set("names", names);
+		args.set("bets", bets)
+
+		this.gamblers.forEach((g: Gambler) => {
+				names.push(g.getName());
+				bets.push(g.getBet().toString());
+		});
+
+		this.tui.getComponents().forEach(component => {
+			renderer.draw(component.getX(),component.getY(),component.toString(args),component.getFormat());
+		});	}
 }
 
 class Casino implements IState {
 	private tui: Tui;
 	private gamblers: Gambler[];
-	private y: number = 0;
-	
+	private enterGame: boolean;
+	private debugStatement: string = "";
+
 	public constructor() {
-		this.gamblers = [new StableGambler("Bob", 10, 5)]
+		this.gamblers = [new StableGambler("Bob", 10, 5), new StableGambler("Josh", 10, 5), new StableGambler("Alice", 10, 5)];
+		
+
 		const callbacks: Map<string, ()=>void> = new Map();
-		callbacks.set("start", this.start);
+		callbacks.set("start", () => this.start());
 		callbacks.set("quit", process.exit);
 		this.tui = new Tui("tui.json","casino",callbacks);
+		
+		this.enterGame = false;
 	}
 
 	public start(): void {
+		this.enterGame = true;
 	}
  	public enter(): void {
  	}
@@ -175,81 +192,120 @@ class Casino implements IState {
 	}
 
 	public update(manager: StateManager, keyHandler : KeyEventHandler): void {
-		if(keyHandler.keyPressed("w")) this.tui.nextButton();
+		if(this.enterGame) manager.enterState(new GuessTheNumber(this.gamblers));
+		
+		if(keyHandler.keyPressed("w")){this.tui.changeButton(-1);}
+		if(keyHandler.keyPressed("s")) this.tui.changeButton(1);
+
+		else if(keyHandler.keyPressed("\r")) this.tui.getCurrentButton().click();
+		
 	}
 
 	public render(renderer: Renderer): void {
 		this.tui.getComponents().forEach(component => {
-			renderer.draw(component.getX(),component.getY(),component.toString(),component.getFormat());
+			renderer.draw(
+				component.getX(),
+				component.getY(),
+				component.toString(),
+				component.getFormat()
+			);
 		});
+		renderer.drawDebug(0,0,`${this.tui.currentButton}`,"");
 	}
 }
-interface TuiSpecification {
+interface BaseTuiSpecification {
+	type: string;
 	x: number | string;
 	y: number | string;
 	formatting: string;
 	visual: string[];
-	callback: string | undefined;
 }
+
+interface ButtonComponentSpecification extends BaseTuiSpecification {
+	type: "button";
+	callback: string;
+}
+
+interface TextComponentSpecification extends BaseTuiSpecification {
+	type: "text";
+}
+
+interface ListComponentSpecification extends BaseTuiSpecification {
+	type: "list";
+}
+
+type TuiSpecification = ListComponentSpecification | ButtonComponentSpecification | TextComponentSpecification;
 
 class TuiComponent {
 	private x: number;
 	private y: number;
 	private visual: string[];
-	protected format: string;
+	private format: string;
 
-	public constructor(spec: TuiSpecification) {
+	protected constructor(spec: TuiSpecification) {
 		this.format = spec.formatting;
 		this.visual = spec.visual;
 
 		let maxLineLength: number = Math.max(...this.visual.map((str) => str.length));
 		this.visual = this.visual.map((str) => str + " ".repeat(maxLineLength - str.length));
 
-		//TO-DO: Refactor this
-		if(typeof spec.x === "string") {
-			if(spec.x === "center") {
-				this.x = Math.ceil((Application.width - maxLineLength) / 2);
-			} else {
-				throw new Error(`Unknown alignment type "${spec.x}"`);
-			}
-		}else {
-			this.x = spec.x;
-		}
-
-		if(typeof spec.y === "string") {
-			if(spec.y === "center") {
-				this.y = Math.ceil((Application.height - this.visual.length) / 2);
-			} else {
-				throw new Error(`Unknown alignment type "${spec.y}"`);
-			}
-		}else {
-			this.y = spec.y;
-		}
+		this.x = TuiComponent.computePosition(spec.x,Application.width, maxLineLength);
+		this.y = TuiComponent.computePosition(spec.y,Application.height, this.visual.length);
 
 	}
 
-	public toString(): string {
+	public toString(args: Map<string, string | string[]> = new Map()): string {
 		return(this.visual.join("\n"));
 	}
 
+	protected getBaseFormat(): string {return this.format;}
+	protected getBaseVisual(): string[] {return this.visual;}
+	
 	public getFormat(): string {return this.format;}
 	public getX(): number {return this.x}
 	public getY(): number {return this.y}
+
+	private static computePosition(
+		position: number | string,
+		totalSize: number,
+		contentSize: number,
+	): number {
+		if(typeof position === "number") return position;
+
+		switch(position) {
+			case "center":
+				return Math.ceil((totalSize - contentSize)/2)
+			case "bottom":
+			case "right":
+				return(totalSize - contentSize)
+			case "top":
+			case "left":
+				return 0;
+			default:
+				throw new Error(`Unknown alignment type "${position}"`)
+		}
+	}
+
 }
 
-class Button extends TuiComponent {
+class TextComponenet extends TuiComponent{
+	public constructor(spec: TextComponentSpecification) {
+		super(spec);
+	}
+}
+
+class ButtonComponenet extends TuiComponent {
 	private isSelected: boolean;
 	private callback: () => void;
 
-	public constructor(spec: TuiSpecification, callback: (()=>void) | undefined) {
+	public constructor(spec: ButtonComponentSpecification, callback: (()=>void)) {
 		super(spec);
 		this.isSelected = false;
-		if(callback == undefined) throw new Error(`Unkown callback ${spec.callback}`);
 		this.callback = callback;	
 	}
 
 	public override getFormat(): string {
-		if(this.isSelected) return this.format;
+		if(this.isSelected) return this.getBaseFormat();
 		else return "";
 	}
 	public click(): void {this.callback();}
@@ -259,52 +315,95 @@ class Button extends TuiComponent {
 
 }
 
+class ListComponent extends TuiComponent {
+	constructor(spec: ListComponentSpecification){
+		super(spec);
+	}
+
+	public override toString(args: Map<string, string | string[]> = new Map()): string {
+		const visual: string = this.getBaseVisual().join("");
+		const list: string[] = [];
+
+		const names: string | string[] | undefined = args.get("names");
+		const bets: string | string[] | undefined = args.get("bets");
+
+		if(names instanceof Array && bets instanceof Array) {
+			for(let i = 0; i < Math.min(names.length, bets.length); i++) {
+				list.push(visual.replace("${name}",names[i]).replace("${bet}", bets[i]));
+			}
+		}
+
+		return list.join("\n");
+	}
+}
+
 class Tui {
 	private components: TuiComponent[];
-	private buttons: Button[];
-	private currentButton: number;
+	public currentButton: number;
 
 	constructor(file: string, state: string, callbacks: Map<string, ()=>void>) {
 		const tuiJSON: any = JSON.parse(fs.readFileSync("tui.json","utf-8"));
 		this.components = [];
-		this.buttons = [];
 		this.currentButton = 0;
 
-		tuiJSON[state].forEach((spec: TuiSpecification) => this.addComponenet(spec, callbacks));
+		//This is technically unsafe, the read json objects are just objects.... Oh well.
+		tuiJSON[state].forEach((spec: TuiSpecification) => this.createComponenet(spec, callbacks));
 
-		if(this.buttons.length > 0) this.buttons[this.currentButton].toggleSelected();
+		//To avoid holding two arrays which both contain buttons
+		const buttons = this.components.filter((componet) => (componet instanceof ButtonComponenet));
+		if(buttons.length > 0) buttons[this.currentButton].toggleSelected();
 	}
 
-	private addComponenet(spec: TuiSpecification, callbacks: Map<string, ()=>void>): void {
-		if(spec.callback != undefined) {
-			const button: Button = new Button(spec,callbacks.get(spec.callback));
-			this.buttons.push(button);
-			this.components.push(button);
-		}else {
-			this.components.push(new TuiComponent(spec));
-		}
+	public changeButton(delta: number): void {
+		const buttons = this.components.filter((componet) => (componet instanceof ButtonComponenet));
+
+		if(buttons.length === 0) return;
+
+		buttons[this.currentButton].toggleSelected();
+		const n: number = this.currentButton + delta;
+		const d: number = buttons.length;
+		//Correct modulo, tbh I never realized % was just remainder and not modulo.
+		this.currentButton = ((n % d) + d) % d
+		buttons[this.currentButton].toggleSelected();
 	}
 
-	public nextButton(): void {
-		this.buttons[this.currentButton].toggleSelected();
-		this.currentButton = (this.currentButton + 1) % this.buttons.length;
-		this.buttons[this.currentButton].toggleSelected();
-	}
 
-	public getCurrentButton(): Button {
-		return this.buttons[this.currentButton];
+	public getCurrentButton(): ButtonComponenet {
+		const buttons = this.components.filter((componet) => (componet instanceof ButtonComponenet));
+		return buttons[this.currentButton];
 	}
 
 	public getComponents(): TuiComponent[] {
 		return this.components;
 	}
 
+
+	private createComponenet(spec: TuiSpecification, callbacks: Map<string, ()=>void>): void {
+		// Type field allows for typescript to figure out what fields are valid.
+		// This is the most amazing feature ever....
+		switch(spec.type) {
+			case "button":
+				const callback: (() => void) | undefined = callbacks.get(spec.callback);
+				if(!callback) throw new Error(`Unknown Callback ${spec.callback}`);
+				const button: ButtonComponenet = new ButtonComponenet(spec,callback);
+				this.components.push(button);
+				break
+			case "text":
+				this.components.push(new TextComponenet(spec));
+				break;
+			case "list":
+				this.components.push(new ListComponent(spec));
+				break;
+		}
+	}
 }
+
+
 class Application extends StateManager {
 	private static FPS = 60;
 	private static MSPF = 1000 / this.FPS;
-	public static height = 10;
-	public static width = 50;
+	public static height = 23;
+	public static width = 101;
 
 	private renderer: Renderer;
 	private keyHandler: KeyEventHandler;
@@ -330,16 +429,25 @@ class Application extends StateManager {
 
 	public start(): void {
 		let currentState: IState | undefined = this.getCurrentState();
+		
 		const loop = () => {
 			if(currentState == undefined) return;
-	
-			// this.renderer.clear();
-			// currentState.render(this.renderer);
-			// this.renderer.show();
+			
+			const terminalWidth = process.stdout.columns;
+			const terminalHeight = process.stdout.rows;
+
+			this.renderer.clear();
+			if(terminalWidth < Application.width || terminalHeight < Application.height) {
+				console.error("Terminal too small, please resize to resume!")
+			} 
+			else {
+			currentState.render(this.renderer);
+			this.renderer.show();
 
 			currentState.update(this, this.keyHandler);
 
 			currentState = this.getCurrentState();
+			}
 			// Loop again after events are handled.
 			setTimeout(loop, Application.MSPF);
 		}
@@ -386,7 +494,7 @@ class Buffer {
 		for(let y = 0; y < this.height; y++) {
 			this.pixels.push([]);
 			for(let x = 0; x < this.width; x++) {
-				this.pixels[y].push({format: "", char: "-"})
+				this.pixels[y].push({format: "", char: " "})
 			}
 		}
 	}
@@ -394,25 +502,29 @@ class Buffer {
 
 	public toString(): string {
 		//TO-DO: Refactor this shit
-		let res: string = "";
+		let buffer: string[] = [];
 		let lastFormat: string = "";
+
 		for(let y = 0; y < this.pixels.length; y++) {
 			for(let x = 0; x < this.pixels[y].length; x++) {
 				const pixel: Pixel = this.pixels[y][x];
+
 				if(pixel.format !== lastFormat) {
 					lastFormat = pixel.format;
-					res += "\u001b[0m";
-					res += pixel.format;
+					buffer.push("\u001b[0m");
+					buffer.push(pixel.format);
 				}
-					res += pixel.char;
+					buffer.push(pixel.char);
 			}
-			res += "\n"
+			buffer.push("\n");
 		}
-		return res;
+		buffer.push("\u001b[0m");
+
+		return buffer.join("");
 	}
 	
 	public clear(): void {
-		this.pixels.forEach((str) => str.map((p) => {p.format = ""; p.char = "-";}))
+		this.pixels.forEach((str) => str.map((p) => {p.format = ""; p.char = " ";}))
 	}
 
 	public setPixel(x: number, 
@@ -435,21 +547,24 @@ class Buffer {
 }
 class Renderer {
 	private buffer: Buffer;
+	private debugBuffer: Buffer;
 
-	public constructor(width: number, height: number){
+	public constructor(width: number, height: number, debugWidth: number = width,debugHeight: number = 1){
 		this.buffer = new Buffer(width, height);
+		this.debugBuffer = new Buffer(debugWidth, debugHeight);
 	}
 
 	private drawToRegion(x: number, 
 						 y: number, 
 						 str: string,
-						 format: string
+						 format: string,
+						 buffer: Buffer,
 						): void {``
 		const chars: string[][] = str.split("\n").map((s) => s.split(""));
 		//TO-DO: Optimize this for early stop if we overrun the buffer
 		for(let row = 0; row < chars.length; row++) {
 			for(let col = 0; col < chars[row].length; col++){
-				this.buffer.setPixel(
+				buffer.setPixel(
 					x + col, 
 					y + row,
 					chars[row][col],
@@ -459,16 +574,16 @@ class Renderer {
 		}
 	}
 	public draw(x: number, y: number, str: string, format: string): void {
-		this.drawToRegion(x, y, str,format);
+		this.drawToRegion(x, y, str, format, this.buffer);
 	}
 
-	public drawDebug(x: number, y: number, str: string): void {
-		//TO-DO: Add debug buffer or debug regions in main buffer
-		throw new Error("Debug Drawing is not Implmented!")
+	public drawDebug(x: number, y: number, str: string,format: string): void {
+		this.drawToRegion(x, y, str, format, this.debugBuffer);
 	}
 
 	public show(): void { 
 		console.log(this.buffer.toString());
+		console.log(this.debugBuffer.toString());
 	}
 	
 	public clear(): void {
@@ -481,22 +596,21 @@ new Application().start();
 
 
 
-// Application
-//    |-> States
-//			|-> Casino (Main Menu)
-//			|-> Game
-//				|-> Substate 
-//						|-> PlaceBet
-//						|-> Simulating
-//						|-> Results		
-
-// States must interact with their manager in some way.
-// Idea: States can return an object, which details a command for the application
-// Idea: Update can pass application as a parameter
-// Idea: States can hold application as a field
-// Idea: States can return a flag
+//TO-DO:
+// TUI
+//  |-> Frame
+//  |-> Fill with data
+//		|-> Repeatable Lists
+//		|-> 
 
 
+//TUI component types
+//	BUtton
+//		|-> Position (x,y), visual repr, callback
+//	Text
+//		|-> Position, visual repr
+//	List
+//		|-> Position, Entry Repr, Max Columns, Max Rows
 
 // Chosen Solution:
 // 		A state machine/state manager will inject itself as a parameter into the update
