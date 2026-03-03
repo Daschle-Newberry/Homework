@@ -160,53 +160,55 @@ class Casino implements IState {
 	
 	public constructor() {
 		this.gamblers = [new StableGambler("Bob", 10, 5)]
-		this.tui = new Tui("tui.json","casino");
+		const callbacks: Map<string, ()=>void> = new Map();
+		callbacks.set("start", this.start);
+		callbacks.set("quit", process.exit);
+		this.tui = new Tui("tui.json","casino",callbacks);
 	}
 
+	public start(): void {
+	}
  	public enter(): void {
-		console.log("Entering Casino");
  	}
 
 	public exit(): void {
-		console.log("Exiting Casino");
 	}
 
 	public update(manager: StateManager, keyHandler : KeyEventHandler): void {
+		if(keyHandler.keyPressed("w")) this.tui.nextButton();
 	}
 
 	public render(renderer: Renderer): void {
 		this.tui.getComponents().forEach(component => {
-			renderer.draw(component.getX(),component.getY(),component.toString());
+			renderer.draw(component.getX(),component.getY(),component.toString(),component.getFormat());
 		});
 	}
 }
 interface TuiSpecification {
-	type: string;
 	x: number | string;
 	y: number | string;
 	formatting: string;
 	visual: string[];
+	callback: string | undefined;
 }
 
 class TuiComponent {
 	private x: number;
 	private y: number;
-	private formatting: string;
 	private visual: string[];
+	protected format: string;
 
-	//         1
-	//00000000000000000000
-	constructor(spec: TuiSpecification) {
-		this.formatting = spec.formatting;
+	public constructor(spec: TuiSpecification) {
+		this.format = spec.formatting;
 		this.visual = spec.visual;
 
 		let maxLineLength: number = Math.max(...this.visual.map((str) => str.length));
 		this.visual = this.visual.map((str) => str + " ".repeat(maxLineLength - str.length));
 
+		//TO-DO: Refactor this
 		if(typeof spec.x === "string") {
 			if(spec.x === "center") {
 				this.x = Math.ceil((Application.width - maxLineLength) / 2);
-				console.log(this.x);
 			} else {
 				throw new Error(`Unknown alignment type "${spec.x}"`);
 			}
@@ -227,40 +229,82 @@ class TuiComponent {
 	}
 
 	public toString(): string {
-		return(
-			this.visual
-			.map(line => `${this.formatting}${line}\u001b[0m`)
-			.join("\n")
-			)
+		return(this.visual.join("\n"));
 	}
 
+	public getFormat(): string {return this.format;}
 	public getX(): number {return this.x}
 	public getY(): number {return this.y}
+}
 
+class Button extends TuiComponent {
+	private isSelected: boolean;
+	private callback: () => void;
+
+	public constructor(spec: TuiSpecification, callback: (()=>void) | undefined) {
+		super(spec);
+		this.isSelected = false;
+		if(callback == undefined) throw new Error(`Unkown callback ${spec.callback}`);
+		this.callback = callback;	
+	}
+
+	public override getFormat(): string {
+		if(this.isSelected) return this.format;
+		else return "";
+	}
+	public click(): void {this.callback();}
+	public toggleSelected(): void {
+		this.isSelected = !this.isSelected;
+	}
 
 }
 
 class Tui {
 	private components: TuiComponent[];
+	private buttons: Button[];
+	private currentButton: number;
 
-	constructor(file: string, state: string) {
+	constructor(file: string, state: string, callbacks: Map<string, ()=>void>) {
 		const tuiJSON: any = JSON.parse(fs.readFileSync("tui.json","utf-8"));
-		this.components = tuiJSON[state].map((spec: TuiSpecification) => new TuiComponent(spec));
+		this.components = [];
+		this.buttons = [];
+		this.currentButton = 0;
+
+		tuiJSON[state].forEach((spec: TuiSpecification) => this.addComponenet(spec, callbacks));
+
+		if(this.buttons.length > 0) this.buttons[this.currentButton].toggleSelected();
 	}
 
-	public addComponenet(component: TuiComponent): void {
-		this.components.push(component);
+	private addComponenet(spec: TuiSpecification, callbacks: Map<string, ()=>void>): void {
+		if(spec.callback != undefined) {
+			const button: Button = new Button(spec,callbacks.get(spec.callback));
+			this.buttons.push(button);
+			this.components.push(button);
+		}else {
+			this.components.push(new TuiComponent(spec));
+		}
 	}
+
+	public nextButton(): void {
+		this.buttons[this.currentButton].toggleSelected();
+		this.currentButton = (this.currentButton + 1) % this.buttons.length;
+		this.buttons[this.currentButton].toggleSelected();
+	}
+
+	public getCurrentButton(): Button {
+		return this.buttons[this.currentButton];
+	}
+
 	public getComponents(): TuiComponent[] {
 		return this.components;
 	}
 
 }
 class Application extends StateManager {
-	private static FPS = 5;
+	private static FPS = 60;
 	private static MSPF = 1000 / this.FPS;
 	public static height = 10;
-	public static width = 10;
+	public static width = 50;
 
 	private renderer: Renderer;
 	private keyHandler: KeyEventHandler;
@@ -279,9 +323,8 @@ class Application extends StateManager {
 		process.stdin.resume();
 		process.stdin.on("keypress", (str, key) => {
 			this.keyHandler.handle(str,key);
-		})
-		
-
+		});
+	
 		this.enterState(new Casino());
 	}
 
@@ -290,23 +333,19 @@ class Application extends StateManager {
 		const loop = () => {
 			if(currentState == undefined) return;
 	
-			this.renderer.clear();
-			currentState.render(this.renderer);
-			// this.renderer.draw(0,0,"Hello!");
-			this.renderer.show();
-			// currentState.update(this, this.keyHandler);
+			// this.renderer.clear();
+			// currentState.render(this.renderer);
+			// this.renderer.show();
 
-			// currentState = this.getCurrentState();
-			
+			currentState.update(this, this.keyHandler);
+
+			currentState = this.getCurrentState();
 			// Loop again after events are handled.
 			setTimeout(loop, Application.MSPF);
 		}
 		
 		loop();
 	}
-
-
-
 }
 
 type Key = readline.Key;
@@ -324,50 +363,70 @@ class KeyEventHandler {
 	}
 
 	public keyPressed(key: string){
-		return this.wasPressed.has(key);
+		return this.wasPressed.delete(key);
 	}
 
 }
 
+type Pixel = {
+	format: string;
+	char: string;
+}
 
 class Buffer {
 	private width: number;
 	private height: number;
-	private pixels: string[][];
+	private pixels: Pixel[][];
 
 	public constructor(width: number, height: number){
 		this.width = width;
 		this.height = height;
-
-		
-
 		this.pixels = [];
-
-		this.clear();
-	}
-
-
-	public toString(): string {
-		return this.pixels.map((s) => s.join("")).join("\n");
-	}
-	
-	public clear(): void {
-		this.pixels = [];
-		for(let y = 0; y < this.height;  y++){
+		//TO-DO: Refactor this shit
+		for(let y = 0; y < this.height; y++) {
 			this.pixels.push([]);
-			for(let x = 0; x < this.width; x++){
-				this.pixels[y].push(" ");
+			for(let x = 0; x < this.width; x++) {
+				this.pixels[y].push({format: "", char: "-"})
 			}
 		}
 	}
 
+
+	public toString(): string {
+		//TO-DO: Refactor this shit
+		let res: string = "";
+		let lastFormat: string = "";
+		for(let y = 0; y < this.pixels.length; y++) {
+			for(let x = 0; x < this.pixels[y].length; x++) {
+				const pixel: Pixel = this.pixels[y][x];
+				if(pixel.format !== lastFormat) {
+					lastFormat = pixel.format;
+					res += "\u001b[0m";
+					res += pixel.format;
+				}
+					res += pixel.char;
+			}
+			res += "\n"
+		}
+		return res;
+	}
+	
+	public clear(): void {
+		this.pixels.forEach((str) => str.map((p) => {p.format = ""; p.char = "-";}))
+	}
+
 	public setPixel(x: number, 
 					y: number, 
-					char: string, 
+					char: string,
+					format: string 
 					): void {
-		if(x < 0 || x > this.width) return;
-		if(y < 0 || y > this.height) return;
-		this.pixels[y][x] = char;
+		if(this.clip(x,y)) return;
+		this.pixels[y][x].char = char;
+		this.pixels[y][x].format = format;
+	}
+
+	private clip(x: number, y: number): boolean {
+		return x < 0 || x >= this.width || y < 0 || y >= this.height
 	}
 
 	public getDim(): [number, number] {return [this.width, this.height];}
@@ -375,7 +434,6 @@ class Buffer {
 
 }
 class Renderer {
-	// NEED TO FIX STORAGE FOR ESCAPE SEQUENCES IN STRINGS 
 	private buffer: Buffer;
 
 	public constructor(width: number, height: number){
@@ -384,7 +442,8 @@ class Renderer {
 
 	private drawToRegion(x: number, 
 						 y: number, 
-						 str: string
+						 str: string,
+						 format: string
 						): void {``
 		const chars: string[][] = str.split("\n").map((s) => s.split(""));
 		//TO-DO: Optimize this for early stop if we overrun the buffer
@@ -393,13 +452,14 @@ class Renderer {
 				this.buffer.setPixel(
 					x + col, 
 					y + row,
-					chars[row][col]
+					chars[row][col],
+					format
 				);
 			}
 		}
 	}
-	public draw(x: number, y: number, str: string): void {
-		this.drawToRegion(x, y, str);
+	public draw(x: number, y: number, str: string, format: string): void {
+		this.drawToRegion(x, y, str,format);
 	}
 
 	public drawDebug(x: number, y: number, str: string): void {

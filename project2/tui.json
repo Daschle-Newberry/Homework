@@ -3,25 +3,19 @@
     "SOURCE": "https://patorjk.com/software/taag/#p=display&f=Graffiti&t=Type+&x=none&v=4&h=4&w=80&we=false",
     "casino" : [ 
         {
-            "type": "MenuTitle",
-            "x" : 0,
+            "x" : "center",
             "y": 0,
-            "formatting": "\u001b[47m",
-            "visual": ["1234567890"]
+            "formatting": "\u001b[34m",
+            "visual": ["Casino Simulator"]
         },
         {
-            "type": "Play",
-            "x" : "center",
-            "y": 1,
-            "formatting": "\u001b[47m",
-            "visual": ["Play"]
-        },
-          {
-            "type": "Quit",
             "x" : "center",
             "y": 2,
             "formatting": "\u001b[47m",
-            "visual": ["Quit"]
+
+            "visual": [["Start Simulation"],["Start Simulation"]],
+            "callback": "start"
+            
         }
     ]
 
