@@ -202,6 +202,7 @@ class Casino implements IState {
 	}
 
 	public render(renderer: Renderer): void {
+		renderer.drawDebug(0,0,"hello, I am a debug statement for debugging")
 		this.tui.getComponents().forEach(component => {
 			renderer.draw(
 				component.getX(),
@@ -210,14 +211,18 @@ class Casino implements IState {
 				component.getFormat()
 			);
 		});
-		renderer.drawDebug(0,0,`${this.tui.currentButton}`,"");
 	}
+}
+
+type Format = {
+	background: string;
+	foreground: string;
 }
 interface BaseTuiSpecification {
 	type: string;
 	x: number | string;
 	y: number | string;
-	formatting: string;
+	format: Format;
 	visual: string[];
 }
 
@@ -240,14 +245,14 @@ class TuiComponent {
 	private x: number;
 	private y: number;
 	private visual: string[];
-	private format: string;
+	private format: Format;
 
 	protected constructor(spec: TuiSpecification) {
-		this.format = spec.formatting;
+		this.format = spec.format;
 		this.visual = spec.visual;
 
 		let maxLineLength: number = Math.max(...this.visual.map((str) => str.length));
-		this.visual = this.visual.map((str) => str + " ".repeat(maxLineLength - str.length));
+		this.visual = TuiComponent.padRight(this.visual);
 
 		this.x = TuiComponent.computePosition(spec.x,Application.width, maxLineLength);
 		this.y = TuiComponent.computePosition(spec.y,Application.height, this.visual.length);
@@ -258,14 +263,14 @@ class TuiComponent {
 		return(this.visual.join("\n"));
 	}
 
-	protected getBaseFormat(): string {return this.format;}
+	protected getBaseFormat(): Format {return this.format;}
 	protected getBaseVisual(): string[] {return this.visual;}
 	
-	public getFormat(): string {return this.format;}
+	public getFormat(): Format {return this.format;}
 	public getX(): number {return this.x}
 	public getY(): number {return this.y}
 
-	private static computePosition(
+	protected static computePosition(
 		position: number | string,
 		totalSize: number,
 		contentSize: number,
@@ -286,6 +291,11 @@ class TuiComponent {
 		}
 	}
 
+	protected static padRight(lines: string[]) {
+		let maxLineLength: number = Math.max(...lines.map((str) => str.length));
+		return lines.map((str) => str + " ".repeat(maxLineLength - str.length));
+	}
+
 }
 
 class TextComponenet extends TuiComponent{
@@ -304,9 +314,9 @@ class ButtonComponenet extends TuiComponent {
 		this.callback = callback;	
 	}
 
-	public override getFormat(): string {
+	public override getFormat(): Format {
 		if(this.isSelected) return this.getBaseFormat();
-		else return "";
+		else return {background:"",foreground:"",};
 	}
 	public click(): void {this.callback();}
 	public toggleSelected(): void {
@@ -333,7 +343,8 @@ class ListComponent extends TuiComponent {
 			}
 		}
 
-		return list.join("\n");
+		
+		return TuiComponent.padRight(list).join("\n");
 	}
 }
 
@@ -423,30 +434,32 @@ class Application extends StateManager {
 		process.stdin.on("keypress", (str, key) => {
 			this.keyHandler.handle(str,key);
 		});
+
+		process.stdin.on("resize", () => process.stdout.write('\x1Bc'));
 	
 		this.enterState(new Casino());
 	}
 
 	public start(): void {
 		let currentState: IState | undefined = this.getCurrentState();
-		
+		const [rendererX,rendererY] = this.renderer.getDim();
+
 		const loop = () => {
 			if(currentState == undefined) return;
 			
 			const terminalWidth = process.stdout.columns;
 			const terminalHeight = process.stdout.rows;
+	
 
-			this.renderer.clear();
-			if(terminalWidth < Application.width || terminalHeight < Application.height) {
-				console.error("Terminal too small, please resize to resume!")
+			if(terminalWidth < rendererX || terminalHeight < rendererY) {
+				this.renderer.error(`Terminal is size [${terminalWidth},${terminalHeight}], must be [${rendererX},${rendererY}]`)
 			} 
 			else {
-			currentState.render(this.renderer);
-			this.renderer.show();
-
-			currentState.update(this, this.keyHandler);
-
-			currentState = this.getCurrentState();
+				this.renderer.clear();
+				currentState.render(this.renderer);
+				currentState.update(this, this.keyHandler);
+				currentState = this.getCurrentState();
+				this.renderer.show();
 			}
 			// Loop again after events are handled.
 			setTimeout(loop, Application.MSPF);
@@ -477,24 +490,33 @@ class KeyEventHandler {
 }
 
 type Pixel = {
-	format: string;
+	format: Format;
 	char: string;
 }
 
 class Buffer {
 	private width: number;
 	private height: number;
+	private clearChar: string;
+	private clearFormat: Format;
 	private pixels: Pixel[][];
 
-	public constructor(width: number, height: number){
+	public constructor(width: number, 
+					   height: number, 
+					   clearChar: string = ' ', 
+					   clearFormat: Format = {background:'', foreground:''}
+					){
 		this.width = width;
 		this.height = height;
+		this.clearChar = clearChar;
+		this.clearFormat = clearFormat;
 		this.pixels = [];
-		//TO-DO: Refactor this shit
+
+		//init buffer with empty pixels
 		for(let y = 0; y < this.height; y++) {
 			this.pixels.push([]);
 			for(let x = 0; x < this.width; x++) {
-				this.pixels[y].push({format: "", char: " "})
+				this.pixels[y].push({format: this.clearFormat, char: this.clearChar})
 			}
 		}
 	}
@@ -503,34 +525,47 @@ class Buffer {
 	public toString(): string {
 		//TO-DO: Refactor this shit
 		let buffer: string[] = [];
-		let lastFormat: string = "";
+		let lastFormat: Format = {background: "", foreground: ""};
 
 		for(let y = 0; y < this.pixels.length; y++) {
 			for(let x = 0; x < this.pixels[y].length; x++) {
 				const pixel: Pixel = this.pixels[y][x];
+				const format: Format = pixel.format;
 
-				if(pixel.format !== lastFormat) {
-					lastFormat = pixel.format;
-					buffer.push("\u001b[0m");
-					buffer.push(pixel.format);
+				//Push the clearFormat if formatting is blank.
+				if(format.background === "") format.background = this.clearFormat.background;
+				if(format.foreground === "") format.foreground = this.clearFormat.foreground;
+
+				if(format.background !== lastFormat.background || format.foreground !== lastFormat.foreground) {
+					//Reset formatting
+					buffer.push('\x1b[0m')
+
+					//Push new formatting
+					buffer.push(format.background);
+					buffer.push(format.foreground);
+
+					lastFormat = format;
 				}
-					buffer.push(pixel.char);
+				buffer.push(pixel.char);
 			}
-			buffer.push("\n");
-		}
-		buffer.push("\u001b[0m");
+			if(y !== this.pixels.length - 1) buffer.push("\n");
 
+		}
+
+		//Reset formatting so the whole terminal doesn't get formatted
+		buffer.push("\x1b[0m");
+	
 		return buffer.join("");
 	}
 	
 	public clear(): void {
-		this.pixels.forEach((str) => str.map((p) => {p.format = ""; p.char = " ";}))
+		this.pixels.forEach((str) => str.map((p) => {p.format = this.clearFormat; p.char = this.clearChar;}))
 	}
 
 	public setPixel(x: number, 
 					y: number, 
 					char: string,
-					format: string 
+					format: Format 
 					): void {
 		if(this.clip(x,y)) return;
 		this.pixels[y][x].char = char;
@@ -538,7 +573,8 @@ class Buffer {
 	}
 
 	private clip(x: number, y: number): boolean {
-		return x < 0 || x >= this.width || y < 0 || y >= this.height
+		const clipsTerminal: boolean = x >= process.stdout.columns || y >= process.stdout.rows;
+		return x < 0 || x >= this.width || y < 0 || y >= this.height;
 	}
 
 	public getDim(): [number, number] {return [this.width, this.height];}
@@ -550,14 +586,14 @@ class Renderer {
 	private debugBuffer: Buffer;
 
 	public constructor(width: number, height: number, debugWidth: number = width,debugHeight: number = 1){
-		this.buffer = new Buffer(width, height);
-		this.debugBuffer = new Buffer(debugWidth, debugHeight);
+		this.buffer = new Buffer(width, height, ' ');
+		this.debugBuffer = new Buffer(debugWidth, debugHeight, '', {background:" ", foreground:"\x1b[31m"});
 	}
 
 	private drawToRegion(x: number, 
 						 y: number, 
 						 str: string,
-						 format: string,
+						 format: Format,
 						 buffer: Buffer,
 						): void {``
 		const chars: string[][] = str.split("\n").map((s) => s.split(""));
@@ -573,22 +609,41 @@ class Renderer {
 			}
 		}
 	}
-	public draw(x: number, y: number, str: string, format: string): void {
+	public draw(x: number, y: number, str: string, format: Format = {background: "", foreground: ""}): void {
 		this.drawToRegion(x, y, str, format, this.buffer);
 	}
 
-	public drawDebug(x: number, y: number, str: string,format: string): void {
+	public drawDebug(x: number, y: number, str: string, format: Format = {background: "", foreground: ""}): void {
 		this.drawToRegion(x, y, str, format, this.debugBuffer);
 	}
 
+	public error(message: string): void {
+		//Go home, clear screen, write in red
+		process.stderr.write("\x1B[H\x1bc\x1b[41m");
+		process.stderr.write(message);
+		process.stderr.write("\x1b[0m")
+	}
 	public show(): void { 
-		console.log(this.buffer.toString());
-		console.log(this.debugBuffer.toString());
+		//Go home
+		process.stdout.write("\x1B[H");
+
+		process.stdout.write(this.buffer.toString());
+		process.stdout.write("\n")
+		process.stdout.write((this.debugBuffer.toString()));
+
+		//Hide cursor
+		process.stdout.write("\x1b[?25l")
 	}
 	
 	public clear(): void {
-		console.clear();
 		this.buffer.clear();
+	}
+
+	public getDim(): [number,number] {
+		const [buffX, buffY] = this.buffer.getDim();
+		const [debugX, debugY] = this.debugBuffer.getDim();
+
+		return [buffX, buffY + debugY];
 	}
 }
 
