@@ -1,0 +1,37 @@
+{
+"guessthenumber": [
+        {   
+            "type": "text",
+            "x" : ["center",0],
+            "y": ["exact",0],
+            "format": {"background": "", "foreground":"38;5;213"},
+            "visual": [
+"  ____                       _____ _          ",
+" / ___|_   _  ___  ___ ___  |_   _| |__   ___ ",
+"| |  _| | | |/ _ \\/ __/ __|   | | | '_ \\ / _ \\",
+"| |_| | |_| |  __/\\__ \\__ \\   | | | | | |  __/",
+" \\____|\\__,_|\\___||___/___/   |_| |_| |_|\\___|",
+"| \\ | |_   _ _ __ ___ | |__   ___ _ __        ",
+"|  \\| | | | | '_ ` _ \\| '_ \\ / _ \\ '__|       ",
+"| |\\  | |_| | | | | | | |_) |  __/ |          ",
+"|_| \\_|\\__,_|_| |_| |_|_.__/ \\___|_|          "]
+        },
+        {
+            "type": "list",
+            "x": ["center",0],
+            "y": ["center",2],
+            "format": {"background": "", "foreground":"37"},
+            "args": ["name","bet"],
+            "maxRows": 8,
+            "visual": ["${name} is betting $${bet}"]
+        },
+        {
+            "type": "button",
+            "x": ["center",0],
+            "y": ["center",8],
+            "format": {"background": "48;5;231", "foreground":"38;5;213"},
+            "visual": ["Continue"],
+            "callback": "continue"
+        }
+    ]
+}

@@ -137,11 +137,16 @@ class GuessTheNumber extends Game {
 		super("GuessTheNumber", players);
 		this.gamblers = players;
 
-		this.tui = new Tui("tui.json","guessthenumber",new Map());
+		const callbacks: Map<string, ()=>void> = new Map();
+
+		callbacks.set("continue", () => this.continue)
+		this.tui = new Tui("tui/guess_tui.json","guessthenumber",callbacks);
 	}
 
 	public enter(): void {}
 	public exit(): void {}
+
+	public continue(): void {}
 
 	public update(manager: StateManager, keyHandler : KeyEventHandler): void {
 
@@ -151,8 +156,8 @@ class GuessTheNumber extends Game {
 		let names: string[] = [];
 		let bets: string[] = [];
 
-		args.set("names", names);
-		args.set("bets", bets)
+		args.set("name", names);
+		args.set("bet", bets)
 
 		this.gamblers.forEach((g: Gambler) => {
 				names.push(g.getName());
@@ -167,7 +172,7 @@ class Extra implements IState {
 	private tui: Tui;
 
 	public constructor() {
-		this.tui = new Tui("tui.json","extra",new Map());
+		this.tui = new Tui("tui/extra_tui.json","extra",new Map());
 	}
 
 	public enter(): void {}
@@ -189,14 +194,16 @@ class Casino implements IState {
 	private debugStatement: string = "";
 
 	public constructor() {
-		this.gamblers = [new StableGambler("Bob", 10, 5), new StableGambler("Josh", 10, 5), new StableGambler("Alice", 10, 5)];
+		this.gamblers = [];		
+		for(let i = 0; i < 24; i++) {
+			this.gamblers.push(new StableGambler(`Bob${i}`,10,5));
+		}
 		
-
 		const callbacks: Map<string, ()=>void> = new Map();
 		callbacks.set("start", () => this.start());
 		callbacks.set("quit", process.exit);
 		callbacks.set("extra", () => this.extra());
-		this.tui = new Tui("tui.json","casino",callbacks);
+		this.tui = new Tui("tui/casino_tui.json","casino",callbacks);
 		
 		this.enterGame = false;
 		this.enterExtra = false;
@@ -241,8 +248,8 @@ type Format = {
 }
 interface BaseTuiSpecification {
 	type: string;
-	x: number | string;
-	y: number | string;
+	x: [string, number];
+	y: [string, number];
 	format: Format;
 	visual: string[];
 }
@@ -258,6 +265,8 @@ interface TextComponentSpecification extends BaseTuiSpecification {
 
 interface ListComponentSpecification extends BaseTuiSpecification {
 	type: "list";
+	args: string[];
+	maxRows: number;
 }
 
 type TuiSpecification = ListComponentSpecification | ButtonComponentSpecification | TextComponentSpecification;
@@ -265,6 +274,8 @@ type TuiSpecification = ListComponentSpecification | ButtonComponentSpecificatio
 class TuiComponent {
 	private readonly initialFormat: Format;
 	private readonly initialVisual: string[];
+	private readonly alignmentX: [string,number];
+	private readonly alignmentY: [string,number];
 	private readonly initialX: number;
 	private readonly initialY: number;
 
@@ -277,6 +288,8 @@ class TuiComponent {
 
 		this.initialX = TuiComponent.computePosition(spec.x,Application.width, maxLineLength);
 		this.initialY = TuiComponent.computePosition(spec.y,Application.height, this.initialVisual.length);
+		this.alignmentX = spec.x;
+		this.alignmentY = spec.y;
 	}
 
 	public fill(args: Map<string, string | string[]>): void {return;}
@@ -290,25 +303,33 @@ class TuiComponent {
 	protected getVisual(): string[] {return this.initialVisual;}
 	protected getX(): number {return this.initialX}
 	protected getY(): number {return this.initialY}
+	protected getAlignmentX(): [string, number] {return this.alignmentX;}
+	protected getAlignmentY(): [string, number] {return this.alignmentY;}
+
 
 	protected static computePosition(
-		position: number | string,
+		position: [string,number],
 		totalSize: number,
 		contentSize: number,
 	): number {
-		if(typeof position === "number") return position;
-
-		switch(position) {
-			case "center":
-				return Math.ceil((totalSize - contentSize)/2)
+		
+		const [alignment, delta] = position;
+		switch(position[0]) {
+			case "exact": 
+				return delta;
+			
+			case "center": 
+				return Math.ceil((totalSize - contentSize)/2) + delta;
+	
 			case "bottom":
-			case "right":
-				return(totalSize - contentSize)
+			case "right": 
+				return (totalSize - contentSize) + delta;
 			case "top":
 			case "left":
-				return 0;
+				return 0 + delta;
 			default:
-				throw new Error(`Unknown alignment type "${position}"`)
+				throw new Error(`Unknown alignment type "${alignment}"`)
+
 		}
 	}
 
@@ -356,6 +377,8 @@ class ListComponent extends TuiComponent {
 	private currentVisual: string[];
 	private currentX: number;
 	private currentY: number;
+	private args: string[];
+	private maxRows: number;
 	
 	constructor(spec: ListComponentSpecification){
 		super(spec);
@@ -363,32 +386,44 @@ class ListComponent extends TuiComponent {
 		this.currentVisual = super.getVisual();
 		this.currentX = super.getX();
 		this.currentY = super.getY();
+		this.args = spec.args;
+		this.maxRows = spec.maxRows;
 	}
 
 	public override fill(args: Map<string, string | string[]>): void {
 		//Super here to get the initial visual
 		const visual: string = super.getVisual().join("");
-		const list: string[] = [];
+		let list: string[] = [];
 
-		const names: string | string[] | undefined = args.get("names");
-		const bets: string | string[] | undefined = args.get("bets");
-
-		if(names instanceof Array && bets instanceof Array) {
-			for(let i = 0; i < Math.min(names.length, bets.length); i++) {
-				list.push(visual.replace("${name}",names[i]).replace("${bet}", bets[i]));
+		for(const arg of this.args) {
+			const data: string | string[] | undefined = args.get(arg);
+			if(data instanceof Array) {
+				for(let i = 0; i < data.length; i++) {
+					if(list.length < i + 1) list.push(visual.replace(`\${${arg}}`,data[i]))
+					else list[i] = list[i].replace(`\${${arg}}`,data[i]);
+				}
 			}
 		}
-		this.currentVisual = TuiComponent.padRight(list);
+
+		list = TuiComponent.padRight(list);
+
+		if(list.length > this.maxRows) {
+			for(let i = this.maxRows; i < list.length; i++) {
+				list[i % this.maxRows] = list[i % this.maxRows] + "   "  + list[i];
+			}
+		}
+		this.currentVisual = list.splice(0,this.maxRows);
 	}
 
 	protected override getVisual(): string[] {return this.currentVisual;}
+	//TO-DO: Fix this so it works with the config position
 	protected override getX(): number {
 		const maxLineLength: number = Math.max(...this.currentVisual.map((str) => str.length));
-		return TuiComponent.computePosition("center",Application.width, maxLineLength);
+		return TuiComponent.computePosition(this.getAlignmentX(),Application.width, maxLineLength);
 	}
 
 	protected override getY(): number {
-		return TuiComponent.computePosition("center",Application.height, this.currentVisual.length);
+		return TuiComponent.computePosition(this.getAlignmentY(),Application.height, this.currentVisual.length);
 	}
 
 }
@@ -398,7 +433,7 @@ class Tui {
 	public currentButton: number;
 
 	constructor(file: string, state: string, callbacks: Map<string, ()=>void>) {
-		const tuiJSON: any = JSON.parse(fs.readFileSync("tui.json","utf-8"));
+		const tuiJSON: any = JSON.parse(fs.readFileSync(file,"utf-8"));
 		this.components = [];
 		this.currentButton = 0;
 
@@ -697,6 +732,9 @@ class Renderer {
 new Application().start();
 
 
+
+//Q:
+//	How to allow buttons to change state
 
 //TO-DO:
 // TUI
