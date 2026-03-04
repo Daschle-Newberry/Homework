@@ -159,15 +159,33 @@ class GuessTheNumber extends Game {
 				bets.push(g.getBet().toString());
 		});
 
-		this.tui.getComponents().forEach(component => {
-			renderer.draw(component.getX(),component.getY(),component.toString(args),component.getFormat());
-		});	}
+		this.tui.getComponents().forEach(component => {component.fill(args); component.render(renderer)});
+	}
+}
+
+class Extra implements IState {
+	private tui: Tui;
+
+	public constructor() {
+		this.tui = new Tui("tui.json","extra",new Map());
+	}
+
+	public enter(): void {}
+	public exit(): void {}
+
+	public update(manager: StateManager, keyHandler : KeyEventHandler): void {
+
+	}
+	public render(renderer: Renderer): void {
+		this.tui.getComponents().forEach(component => {component.fill(new Map()); component.render(renderer)});
+	}
 }
 
 class Casino implements IState {
 	private tui: Tui;
 	private gamblers: Gambler[];
 	private enterGame: boolean;
+	private enterExtra: boolean;
 	private debugStatement: string = "";
 
 	public constructor() {
@@ -177,14 +195,21 @@ class Casino implements IState {
 		const callbacks: Map<string, ()=>void> = new Map();
 		callbacks.set("start", () => this.start());
 		callbacks.set("quit", process.exit);
+		callbacks.set("extra", () => this.extra());
 		this.tui = new Tui("tui.json","casino",callbacks);
 		
 		this.enterGame = false;
+		this.enterExtra = false;
 	}
 
 	public start(): void {
 		this.enterGame = true;
 	}
+
+	public extra(): void {
+		this.enterExtra = true;
+	}
+
  	public enter(): void {
  	}
 
@@ -193,6 +218,8 @@ class Casino implements IState {
 
 	public update(manager: StateManager, keyHandler : KeyEventHandler): void {
 		if(this.enterGame) manager.enterState(new GuessTheNumber(this.gamblers));
+		if(this.enterExtra) manager.enterState(new Extra());
+
 		
 		if(keyHandler.keyPressed("w")){this.tui.changeButton(-1);}
 		if(keyHandler.keyPressed("s")) this.tui.changeButton(1);
@@ -203,17 +230,11 @@ class Casino implements IState {
 
 	public render(renderer: Renderer): void {
 		renderer.drawDebug(0,0,"hello, I am a debug statement for debugging")
-		this.tui.getComponents().forEach(component => {
-			renderer.draw(
-				component.getX(),
-				component.getY(),
-				component.toString(),
-				component.getFormat()
-			);
-		});
+		this.tui.getComponents().forEach(component => {component.fill(new Map()); component.render(renderer)});
 	}
 }
 
+// Welcome to hell!
 type Format = {
 	background: string;
 	foreground: string;
@@ -242,33 +263,33 @@ interface ListComponentSpecification extends BaseTuiSpecification {
 type TuiSpecification = ListComponentSpecification | ButtonComponentSpecification | TextComponentSpecification;
 
 class TuiComponent {
-	private x: number;
-	private y: number;
-	private visual: string[];
-	private format: Format;
+	private readonly initialFormat: Format;
+	private readonly initialVisual: string[];
+	private readonly initialX: number;
+	private readonly initialY: number;
 
 	protected constructor(spec: TuiSpecification) {
-		this.format = spec.format;
-		this.visual = spec.visual;
+		this.initialFormat = spec.format;
+		this.initialVisual = spec.visual;
 
-		let maxLineLength: number = Math.max(...this.visual.map((str) => str.length));
-		this.visual = TuiComponent.padRight(this.visual);
+		let maxLineLength: number = Math.max(...this.initialVisual.map((str) => str.length));
+		this.initialVisual = TuiComponent.padRight(this.initialVisual);
 
-		this.x = TuiComponent.computePosition(spec.x,Application.width, maxLineLength);
-		this.y = TuiComponent.computePosition(spec.y,Application.height, this.visual.length);
-
+		this.initialX = TuiComponent.computePosition(spec.x,Application.width, maxLineLength);
+		this.initialY = TuiComponent.computePosition(spec.y,Application.height, this.initialVisual.length);
 	}
 
-	public toString(args: Map<string, string | string[]> = new Map()): string {
-		return(this.visual.join("\n"));
-	}
+	public fill(args: Map<string, string | string[]>): void {return;}
 
-	protected getBaseFormat(): Format {return this.format;}
-	protected getBaseVisual(): string[] {return this.visual;}
+	public render(renderer: Renderer): void {
+		renderer.draw(this.getX(), this.getY(), this.getVisual().join("\n"),this.getFormat());
+	}
 	
-	public getFormat(): Format {return this.format;}
-	public getX(): number {return this.x}
-	public getY(): number {return this.y}
+	//To be overriden by base classes if needed
+	protected getFormat(): Format {return this.initialFormat;}
+	protected getVisual(): string[] {return this.initialVisual;}
+	protected getX(): number {return this.initialX}
+	protected getY(): number {return this.initialY}
 
 	protected static computePosition(
 		position: number | string,
@@ -298,26 +319,31 @@ class TuiComponent {
 
 }
 
+//Technically unnecessary, but okay for future changes.
 class TextComponenet extends TuiComponent{
 	public constructor(spec: TextComponentSpecification) {
 		super(spec);
 	}
 }
 
-class ButtonComponenet extends TuiComponent {
+//Dynamic Components, which override specific getters to change their visual representation
+class ButtonComponent extends TuiComponent {
+	private currentFormat: Format;
 	private isSelected: boolean;
 	private callback: () => void;
 
-	public constructor(spec: ButtonComponentSpecification, callback: (()=>void)) {
+	public constructor(spec: TuiSpecification, callback: (()=>void)) {
 		super(spec);
+		this.currentFormat = super.getFormat();
 		this.isSelected = false;
-		this.callback = callback;	
+		this.callback = callback;
 	}
 
 	public override getFormat(): Format {
-		if(this.isSelected) return this.getBaseFormat();
+		if(this.isSelected) return super.getFormat();
 		else return {background:"",foreground:"",};
 	}
+
 	public click(): void {this.callback();}
 	public toggleSelected(): void {
 		this.isSelected = !this.isSelected;
@@ -326,12 +352,22 @@ class ButtonComponenet extends TuiComponent {
 }
 
 class ListComponent extends TuiComponent {
+	private currentFormat: Format;
+	private currentVisual: string[];
+	private currentX: number;
+	private currentY: number;
+	
 	constructor(spec: ListComponentSpecification){
 		super(spec);
+		this.currentFormat = super.getFormat();
+		this.currentVisual = super.getVisual();
+		this.currentX = super.getX();
+		this.currentY = super.getY();
 	}
 
-	public override toString(args: Map<string, string | string[]> = new Map()): string {
-		const visual: string = this.getBaseVisual().join("");
+	public override fill(args: Map<string, string | string[]>): void {
+		//Super here to get the initial visual
+		const visual: string = super.getVisual().join("");
 		const list: string[] = [];
 
 		const names: string | string[] | undefined = args.get("names");
@@ -342,10 +378,19 @@ class ListComponent extends TuiComponent {
 				list.push(visual.replace("${name}",names[i]).replace("${bet}", bets[i]));
 			}
 		}
-
-		
-		return TuiComponent.padRight(list).join("\n");
+		this.currentVisual = TuiComponent.padRight(list);
 	}
+
+	protected override getVisual(): string[] {return this.currentVisual;}
+	protected override getX(): number {
+		const maxLineLength: number = Math.max(...this.currentVisual.map((str) => str.length));
+		return TuiComponent.computePosition("center",Application.width, maxLineLength);
+	}
+
+	protected override getY(): number {
+		return TuiComponent.computePosition("center",Application.height, this.currentVisual.length);
+	}
+
 }
 
 class Tui {
@@ -361,12 +406,12 @@ class Tui {
 		tuiJSON[state].forEach((spec: TuiSpecification) => this.createComponenet(spec, callbacks));
 
 		//To avoid holding two arrays which both contain buttons
-		const buttons = this.components.filter((componet) => (componet instanceof ButtonComponenet));
+		const buttons: ButtonComponent[] = this.getButtons();
 		if(buttons.length > 0) buttons[this.currentButton].toggleSelected();
 	}
 
 	public changeButton(delta: number): void {
-		const buttons = this.components.filter((componet) => (componet instanceof ButtonComponenet));
+		const buttons: ButtonComponent[] = this.getButtons();
 
 		if(buttons.length === 0) return;
 
@@ -379,14 +424,17 @@ class Tui {
 	}
 
 
-	public getCurrentButton(): ButtonComponenet {
-		const buttons = this.components.filter((componet) => (componet instanceof ButtonComponenet));
+	public getCurrentButton(): ButtonComponent {
+		const buttons: ButtonComponent[] = this.getButtons();
 		return buttons[this.currentButton];
 	}
 
 	public getComponents(): TuiComponent[] {
 		return this.components;
 	}
+
+	//Private because no one needs to see buttons
+	private getButtons(): ButtonComponent[] {return this.components.filter((componet) => (componet instanceof ButtonComponent));}
 
 
 	private createComponenet(spec: TuiSpecification, callbacks: Map<string, ()=>void>): void {
@@ -396,7 +444,7 @@ class Tui {
 			case "button":
 				const callback: (() => void) | undefined = callbacks.get(spec.callback);
 				if(!callback) throw new Error(`Unknown Callback ${spec.callback}`);
-				const button: ButtonComponenet = new ButtonComponenet(spec,callback);
+				const button: ButtonComponent = new ButtonComponent(spec,callback);
 				this.components.push(button);
 				break
 			case "text":
@@ -540,11 +588,11 @@ class Buffer {
 					//Reset formatting
 					buffer.push('\x1b[0m')
 
-					//Push new formatting
-					buffer.push(format.background);
-					buffer.push(format.foreground);
+				//Push new formatting
+					buffer.push(`\x1b[${format.background};${format.foreground}m`)
+					lastFormat.background = format.background;
+					lastFormat.foreground = format.foreground;
 
-					lastFormat = format;
 				}
 				buffer.push(pixel.char);
 			}
@@ -573,7 +621,6 @@ class Buffer {
 	}
 
 	private clip(x: number, y: number): boolean {
-		const clipsTerminal: boolean = x >= process.stdout.columns || y >= process.stdout.rows;
 		return x < 0 || x >= this.width || y < 0 || y >= this.height;
 	}
 
@@ -587,7 +634,7 @@ class Renderer {
 
 	public constructor(width: number, height: number, debugWidth: number = width,debugHeight: number = 1){
 		this.buffer = new Buffer(width, height, ' ');
-		this.debugBuffer = new Buffer(debugWidth, debugHeight, '', {background:" ", foreground:"\x1b[31m"});
+		this.debugBuffer = new Buffer(debugWidth, debugHeight, '', {background:"", foreground:"38;5;196"});
 	}
 
 	private drawToRegion(x: number, 
@@ -697,3 +744,28 @@ new Application().start();
 // Or we can have each Game handle its logic internally, with no extra states
 //[BOTTOM] Casino -> G1 -> G2 ->  .... [TOP]
 // This is WAY messier though, requires a lot of switch statements.
+//
+//
+//Two types of TuiComponents: Dynamic, Static
+// Dyanmic components can change every frame, static components do not.
+// Static components save their data in fields:
+//			|-> visualRepr, x, y, format
+// Dyanmic components change their data based on state and arguments:
+//			|-> getVisualRepr(), getX(), getY(), getFormat()
+//Dyanmic components still need access to their original fields, but must update a new field, to store data. 
+// Every tui component has:
+//		|-> A visual representation, whether that be dynamic or static
+//		|-> A position, whether that be dynamic or static
+//		|-> a render function
+//		|-> A fill function, which is empty for static
+//Tui Component base: Has fields for initial Position, initial visual,initial format
+// 									|-> exposes these to base classes using getters, which are protected. 
+//Dyanmic Tui Component: Has fields for currentPosition, currentVisual, and currentFormat(?)
+//										|-> Button (changes format based on selection)
+//										|-> List (changes position and visual representation based on data provided, and length after filling)
+//Static Tui Component: Has the same fields as Tui Component Base, 
+//										|-> Text (does not change)
+//Solution: 
+// 		TuiComponentBase: contains immutable data for the base classes
+//				|-> DynamicTuiComponent: contains mutable data, which it changes internally from fill()
+//				|-> Any other static component can inherit from TuiComponentBase, or maybe I should have a StaticTuiComponent,but it wouldn't add new functionality. 
