@@ -615,9 +615,7 @@ class Renderer {
 		const chars: string[][] = str.split("\n").map((s) => s.split(""));
 		
 		for(let row = 0; row < chars.length && y + row < this.height; row++){
-			if(y + row > this.height) break;
 			for(let col = 0; col < chars[row].length && x + col < this.width; col++){
-				if(x + col > this.width) break;
 				this.buffer[y + row][x + col] = chars[row][col];
 			}
 		}
