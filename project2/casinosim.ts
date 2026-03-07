@@ -4,7 +4,7 @@ import fs from "fs"
 interface IState {
 	enter(): void;
 	exit(): void;
-	update(manager: StateManager, keyHandler : KeyEventHandler): void;
+	update(manager: StateMachine, keyHandler : KeyEventHandler): void;
 	render(renderer: Renderer): void;
 }
 
@@ -52,7 +52,7 @@ class StableGambler extends Gambler {
 	}
 }
 
-class StateManager {
+class StateMachine {
 	private stateStack: IState[];
 
 	protected constructor() {
@@ -84,7 +84,7 @@ class StateManager {
 }
 
 //Abstract class for handling Game logic, is also a state
-abstract class Game extends StateManager implements IState{
+abstract class Game extends StateMachine implements IState{
 	//Abstract so the typescript is upset that we don't initialize it in Game's constructor
 	private name: string;
 	private book: Map<Gambler, number>;
@@ -99,7 +99,7 @@ abstract class Game extends StateManager implements IState{
 
 	abstract enter(): void;
 	abstract exit(): void;
-	abstract update(manager: StateManager, keyHandler : KeyEventHandler): void;
+	abstract update(manager: StateMachine, keyHandler : KeyEventHandler): void;
 	abstract render(renderer: Renderer): void;
 
 	public getName(): string {return this.name;}
@@ -118,7 +118,7 @@ class InfoScreen implements IState {
 	public enter(): void {console.log("Entering InfoScreen")}
 	public exit(): void {console.log("Exiting InfoScreen")}
 
-	public update(manager: StateManager): void {
+	public update(manager: StateMachine): void {
 	}
 
 	public render(renderer: Renderer): void {
@@ -148,7 +148,7 @@ class GuessTheNumber extends Game {
 
 	public continue(): void {}
 
-	public update(manager: StateManager, keyHandler : KeyEventHandler): void {
+	public update(manager: StateMachine, keyHandler : KeyEventHandler): void {
 
 	}
 	public render(renderer: Renderer): void {
@@ -178,7 +178,7 @@ class Extra implements IState {
 	public enter(): void {}
 	public exit(): void {}
 
-	public update(manager: StateManager, keyHandler : KeyEventHandler): void {
+	public update(manager: StateMachine, keyHandler : KeyEventHandler): void {
 
 	}
 	public render(renderer: Renderer): void {
@@ -187,11 +187,11 @@ class Extra implements IState {
 }
 
 class Casino implements IState {
-	private tui: Tui;
+	private menus: Tui[];
+	private currentTui: number;
 	private gamblers: Gambler[];
 	private enterGame: boolean;
 	private enterExtra: boolean;
-	private debugStatement: string = "";
 
 	public constructor() {
 		this.gamblers = [];		
@@ -200,21 +200,19 @@ class Casino implements IState {
 		}
 		
 		const callbacks: Map<string, ()=>void> = new Map();
-		callbacks.set("start", () => this.start());
+		callbacks.set("start", () => this.enterGame = true);
 		callbacks.set("quit", process.exit);
-		callbacks.set("extra", () => this.extra());
-		this.tui = new Tui("tui/casino_tui.json","casino",callbacks);
+		callbacks.set("extra", () => this.currentTui = 1);
+		callbacks.set("back", () => this.currentTui = 0);
+
+		this.menus = new Array(2);
+		this.menus[0] = new Tui("tui/casino_tui.json","casino",callbacks);
+		this.menus[1] = new Tui("tui/extra_tui.json","extra",callbacks);
+
 		
 		this.enterGame = false;
 		this.enterExtra = false;
-	}
-
-	public start(): void {
-		this.enterGame = true;
-	}
-
-	public extra(): void {
-		this.enterExtra = true;
+		this.currentTui = 0;
 	}
 
  	public enter(): void {
@@ -223,21 +221,27 @@ class Casino implements IState {
 	public exit(): void {
 	}
 
-	public update(manager: StateManager, keyHandler : KeyEventHandler): void {
+	public update(manager: StateMachine, keyHandler : KeyEventHandler): void {
 		if(this.enterGame) manager.enterState(new GuessTheNumber(this.gamblers));
 		if(this.enterExtra) manager.enterState(new Extra());
 
 		
-		if(keyHandler.keyPressed("w")){this.tui.changeButton(-1);}
-		if(keyHandler.keyPressed("s")) this.tui.changeButton(1);
+		if(keyHandler.keyPressed("w")){this.menus[this.currentTui].changeButton(-1);}
+		if(keyHandler.keyPressed("s")) this.menus[this.currentTui].changeButton(1);
 
-		else if(keyHandler.keyPressed("\r")) this.tui.getCurrentButton().click();
+		else if(keyHandler.keyPressed("\r")) this.menus[this.currentTui].getCurrentButton().click();
 		
 	}
 
 	public render(renderer: Renderer): void {
 		renderer.drawDebug(0,0,"hello, I am a debug statement for debugging")
-		this.tui.getComponents().forEach(component => {component.fill(new Map()); component.render(renderer)});
+		this.menus[this.currentTui]
+			.getComponents()
+			.forEach(
+				component => {
+								component.fill(new Map()); 
+							  	component.render(renderer)
+							});
 	}
 }
 
@@ -269,6 +273,7 @@ interface ListComponentSpecification extends BaseTuiSpecification {
 	maxRows: number;
 }
 
+//How can I avoid this?
 type TuiSpecification = ListComponentSpecification | ButtonComponentSpecification | TextComponentSpecification;
 
 class TuiComponent {
@@ -340,11 +345,12 @@ class TuiComponent {
 
 }
 
-//Technically unnecessary, but okay for future changes.
-class TextComponenet extends TuiComponent{
+//Technically unnecessary, but okay incase of future changes.
+class TextComponenet extends TuiComponent {	
 	public constructor(spec: TextComponentSpecification) {
 		super(spec);
 	}
+
 }
 
 //Dynamic Components, which override specific getters to change their visual representation
@@ -493,7 +499,7 @@ class Tui {
 }
 
 
-class Application extends StateManager {
+class Application extends StateMachine {
 	private static FPS = 60;
 	private static MSPF = 1000 / this.FPS;
 	public static height = 23;
