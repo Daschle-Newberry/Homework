@@ -4,6 +4,7 @@ import fs from "fs"
 interface IState {
 	enter(): void;
 	exit(): void;
+
 	update(manager: StateMachine, keyHandler : KeyEventHandler): void;
 	render(renderer: Renderer): void;
 }
@@ -36,6 +37,8 @@ abstract class Gambler {
 	public getName(): string {return this.name;}
 	public getMoney(): number {return this.money;}
 	public getTarget(): number {return this.target;}
+	public addMoney(amount: number): void {this.money += amount;}
+	public removeMovey(amount: number): void {this.money -= amount;}
 	
 }
 
@@ -48,7 +51,36 @@ class StableGambler extends Gambler {
 	}
 
 	public getBet(): number {
-		return Math.max(this.bet, this.getMoney());
+		return Math.min(this.bet, this.getMoney());
+	}
+}
+
+
+class GamblerFactory {
+	private config: any;
+
+	public constructor(config: string) {
+		this.config = JSON.parse(fs.readFileSync(config,"utf-8"));
+
+	}
+	public createGamblers(count: number): Gambler[] {
+		let gamblers: Gambler[] = []
+		for(let i = 0; i <= count; i++) {
+			const randType: number = Math.ceil(Math.random() * 1);
+			const randName: string = this.config.names[Math.ceil(Math.random() * this.config.names.length)]
+			switch(randType) {
+				case 1: 
+					const balance: number = GamblerFactory.randInRange(this.config.stable.balance.lo, this.config.stable.balance.hi);
+					const betPercent: number = GamblerFactory.randInRange(this.config.stable.bet.lo, this.config.stable.bet.hi);
+					gamblers.push(new StableGambler(randName, balance,Math.ceil(balance * betPercent)))
+			}
+		}
+
+		return gamblers;
+	}
+
+	private static randInRange(min: number, max: number): number {
+		return Math.random() * (max - min) + min;
 	}
 }
 
@@ -60,6 +92,7 @@ class StateMachine {
 	}
 
 	public enterState(state: IState): void {
+		this.getCurrentState()?.exit();
 		this.stateStack.push(state);
 		state.enter();
 	}
@@ -72,9 +105,7 @@ class StateMachine {
 
 	public exitState(): void {
 		this.stateStack.pop()?.exit();
-		if(this.stateStack.length > 0){
-			this.stateStack[this.stateStack.length - 1].enter();
-		}
+		this.getCurrentState()?.enter();
 	}
 
 	public getCurrentState(): IState | undefined {
@@ -85,7 +116,6 @@ class StateMachine {
 
 //Abstract class for handling Game logic, is also a state
 abstract class Game extends StateMachine implements IState{
-	//Abstract so the typescript is upset that we don't initialize it in Game's constructor
 	private name: string;
 	private book: Map<Gambler, number>;
 	private players: Gambler[];
@@ -107,82 +137,179 @@ abstract class Game extends StateMachine implements IState{
 }
 
 class InfoScreen implements IState {
-	private info : string;
-	private title: string;
+	private tui: Tui;
+	private args: Map<string, string | string[]>;
+	private continue: boolean;
 
-	public constructor(title: string, info: string) {
-		this.info = info;
-		this.title = title;
+	public constructor(config: string, tuiName: string, args: Map<string, string | string[]>) {
+		const callbacks: Map<string, ()=>void> = new Map();
+		callbacks.set("continue", () => this.continue = true);
+
+		this.tui = new Tui(config,tuiName,callbacks);
+		this.args = args
+		this.continue = false;
 	}
+	
+	public enter(): void {}
+	public exit(): void {}
 
-	public enter(): void {console.log("Entering InfoScreen")}
-	public exit(): void {console.log("Exiting InfoScreen")}
+	public update(manager: StateMachine, keyHandler: KeyEventHandler): void {
+		if(this.continue) manager.exitState();
 
-	public update(manager: StateMachine): void {
+		if(keyHandler.keyPressed("\r")) {
+			manager.exitState();	
+		}
 	}
 
 	public render(renderer: Renderer): void {
-		console.log(this.title);
-		for(const [name, num] of this.info) {
-			console.log(`${name}: ${num}`)
-		}
+		this.tui.getComponents().forEach(component => {component.fill(this.args); component.render(renderer)});
 	}
 }
 
-class GuessTheNumber extends Game {
+enum GameState {
+	PLAYING,
+	DISPLAYING,
+}
+class GuessTheNumberSimulation implements IState {
 	private tui: Tui;
+	private number: number;
+	private state: GameState;
+
+	private book: Map<Gambler, number>;
+	private guesses: Map<Gambler, number>;
+
+	private moneyGained: number;
+
+	public constructor(gamblers: Gambler[], book: Map<Gambler, number>) {
+		this.tui = new Tui("tui/guess_tui.json","game");
+		
+		//Compute the random number for this round
+		this.number = Math.ceil(Math.random() * 4);
+	
+		this.state = GameState.PLAYING;
+		
+		this.book = book;
+		this.guesses = new Map();
+		this.moneyGained = 0;
+
+		// Reusing a list for the number UI because I am lazy and don't want to 
+		// implement another TUI component for dynamic text (it would be so easy)
+		
+		gamblers.forEach((g: Gambler) => {
+				const guess: number = Math.ceil(Math.random() * 4);
+				this.guesses.set(g, guess);
+		});
+
+
+	}
+
+	public enter(): void {}
+	public exit(): void {}
+
+	public update(manager: StateMachine, keyHandler: KeyEventHandler): void {
+		if(keyHandler.keyPressed("\r")) {
+			switch (this.state) {
+				case GameState.PLAYING: {
+					this.state = GameState.DISPLAYING;
+					break;
+				}
+				case GameState.DISPLAYING: {
+					//Updates winners, then creates a new info screen with the winners and their winnings
+					const winners: Map<Gambler, number> = this.updateBalances();
+					const args: Map<string, string | string[]> = new Map();
+					
+					args.set("name", Array.from(winners.keys()).map((g: Gambler) => g.getName()))
+					args.set("winning", Array.from(winners.values()).map((bet: number) => bet.toString()));
+					
+					manager.replaceState(new InfoScreen("tui/guess_tui.json","summary",args));
+					break;
+				}
+
+			}
+		}
+	}
+
+	private updateBalances(): Map<Gambler, number> {
+		const winners: Map<Gambler, number> = new Map();
+		for(const [gambler, guess] of this.guesses) {
+			if(guess === this.number) {
+				const bet: number | undefined = this.book.get(gambler);
+				if(bet !== undefined) {
+					const winnings: number = 4.5 * bet;
+					gambler.addMoney(winnings);
+					winners.set(gambler, winnings)
+				}
+			}
+		}
+
+		return winners;
+	}
+	private getSecretNumberString(): string {
+		if(this.state === GameState.DISPLAYING) {
+			return this.number.toString();
+		} else {
+			return "?";
+		}
+	}
+
+	public render(renderer: Renderer): void {
+		const args: Map<string, string | string[]> = new Map();
+
+		const names: string[] = [];
+		const guesses: string[] = [];
+
+		for(const [gambler,guess] of this.guesses) {
+			names.push(gambler.getName())
+			guesses.push(guess.toString());
+		}
+
+		args.set("name", names);
+		args.set("guess", guesses);
+		args.set("number", [this.getSecretNumberString()]);
+
+		this.tui.getComponents().forEach(component => {component.fill(args); component.render(renderer)});
+	}
+
+}
+
+class GuessTheNumber extends Game {
 	private gamblers: Gambler[];
 
 	public constructor(players: Gambler[]) {
 		super("GuessTheNumber", players);
 		this.gamblers = players;
 
-		const callbacks: Map<string, ()=>void> = new Map();
-
-		callbacks.set("continue", () => this.continue)
-		this.tui = new Tui("tui/guess_tui.json","guessthenumber",callbacks);
-	}
-
-	public enter(): void {}
-	public exit(): void {}
-
-	public continue(): void {}
-
-	public update(manager: StateMachine, keyHandler : KeyEventHandler): void {
-
-	}
-	public render(renderer: Renderer): void {
+		const book: Map<Gambler, number> = new Map();
 		const args: Map<string, string | string[]> = new Map();
-		let names: string[] = [];
-		let bets: string[] = [];
 
-		args.set("name", names);
-		args.set("bet", bets)
+		const bets: number[] = [];
 
 		this.gamblers.forEach((g: Gambler) => {
-				names.push(g.getName());
-				bets.push(g.getBet().toString());
+			const bet: number = g.getBet();
+			book.set(g,bet);
 		});
 
-		this.tui.getComponents().forEach(component => {component.fill(args); component.render(renderer)});
-	}
-}
+		//Convert Key iterator to array and map to names
+		args.set("name", Array.from(book.keys()).map((g: Gambler) => g.getName()))
+		args.set("bet", Array.from(book.values()).map((bet: number) => bet.toString()));
 
-class Extra implements IState {
-	private tui: Tui;
-
-	public constructor() {
-		this.tui = new Tui("tui/extra_tui.json","extra",new Map());
+		this.enterState(new GuessTheNumberSimulation(this.gamblers, book));
+		this.enterState(new InfoScreen("tui/guess_tui.json","info",args));
 	}
 
 	public enter(): void {}
 	public exit(): void {}
 
 	public update(manager: StateMachine, keyHandler : KeyEventHandler): void {
-
+		const currentState: IState | undefined = this.getCurrentState();
+		if(currentState === undefined) {
+			manager.exitState();
+		} else {
+			currentState.update(this, keyHandler);
+		}
 	}
 	public render(renderer: Renderer): void {
-		this.tui.getComponents().forEach(component => {component.fill(new Map()); component.render(renderer)});
+		this.getCurrentState()?.render(renderer);
 	}
 }
 
@@ -191,13 +318,10 @@ class Casino implements IState {
 	private currentTui: number;
 	private gamblers: Gambler[];
 	private enterGame: boolean;
-	private enterExtra: boolean;
 
 	public constructor() {
-		this.gamblers = [];		
-		for(let i = 0; i < 24; i++) {
-			this.gamblers.push(new StableGambler(`Bob${i}`,10,5));
-		}
+		const factory: GamblerFactory = new GamblerFactory("gamblers.json");
+		this.gamblers = factory.createGamblers(15);
 		
 		const callbacks: Map<string, ()=>void> = new Map();
 		callbacks.set("start", () => this.enterGame = true);
@@ -208,28 +332,23 @@ class Casino implements IState {
 		this.menus = new Array(2);
 		this.menus[0] = new Tui("tui/casino_tui.json","casino",callbacks);
 		this.menus[1] = new Tui("tui/extra_tui.json","extra",callbacks);
-
 		
 		this.enterGame = false;
-		this.enterExtra = false;
 		this.currentTui = 0;
 	}
 
- 	public enter(): void {
- 	}
-
+	public enter(): void {}
 	public exit(): void {
+		//Reset flags
+		this.enterGame = false;
 	}
 
 	public update(manager: StateMachine, keyHandler : KeyEventHandler): void {
 		if(this.enterGame) manager.enterState(new GuessTheNumber(this.gamblers));
-		if(this.enterExtra) manager.enterState(new Extra());
-
 		
 		if(keyHandler.keyPressed("w")){this.menus[this.currentTui].changeButton(-1);}
 		if(keyHandler.keyPressed("s")) this.menus[this.currentTui].changeButton(1);
-
-		else if(keyHandler.keyPressed("\r")) this.menus[this.currentTui].getCurrentButton().click();
+		if(keyHandler.keyPressed("\r")) this.menus[this.currentTui].getCurrentButton().click();
 		
 	}
 
@@ -239,7 +358,6 @@ class Casino implements IState {
 			.getComponents()
 			.forEach(
 				component => {
-								component.fill(new Map()); 
 							  	component.render(renderer)
 							});
 	}
@@ -438,12 +556,13 @@ class Tui {
 	private components: TuiComponent[];
 	public currentButton: number;
 
-	constructor(file: string, state: string, callbacks: Map<string, ()=>void>) {
-		const tuiJSON: any = JSON.parse(fs.readFileSync(file,"utf-8"));
+	constructor(file: string, state: string, callbacks?: Map<string, ()=>void>) {
 		this.components = [];
 		this.currentButton = 0;
 
-		//This is technically unsafe, the read json objects are just objects.... Oh well.
+		const tuiJSON: any = JSON.parse(fs.readFileSync(file,"utf-8"));
+
+		//This is technically unsafe, the read json objects are just of type object...
 		tuiJSON[state].forEach((spec: TuiSpecification) => this.createComponenet(spec, callbacks));
 
 		//To avoid holding two arrays which both contain buttons
@@ -466,6 +585,7 @@ class Tui {
 
 
 	public getCurrentButton(): ButtonComponent {
+		//Fix me, currentButton could be outside buttons length
 		const buttons: ButtonComponent[] = this.getButtons();
 		return buttons[this.currentButton];
 	}
@@ -478,13 +598,16 @@ class Tui {
 	private getButtons(): ButtonComponent[] {return this.components.filter((componet) => (componet instanceof ButtonComponent));}
 
 
-	private createComponenet(spec: TuiSpecification, callbacks: Map<string, ()=>void>): void {
+	private createComponenet(spec: TuiSpecification, callbacks?: Map<string, ()=>void>): void {
 		// Type field allows for typescript to figure out what fields are valid.
 		// This is the most amazing feature ever....
 		switch(spec.type) {
 			case "button":
+				if(callbacks === undefined) throw new Error("Button component present but no callbacks were supplied.")
+
 				const callback: (() => void) | undefined = callbacks.get(spec.callback);
 				if(!callback) throw new Error(`Unknown Callback ${spec.callback}`);
+
 				const button: ButtonComponent = new ButtonComponent(spec,callback);
 				this.components.push(button);
 				break
@@ -583,22 +706,44 @@ type Pixel = {
 	char: string;
 }
 
+type Border = {
+	ul: string;
+	ur: string;
+	br: string;
+	bl: string;
+	top: string;
+	bottom: string;
+	left: string,
+	right: string,
+	format: Format;
+	width: number;
+}
+
 class Buffer {
+	private borderWidth: number = 0;
 	private width: number;
 	private height: number;
 	private clearChar: string;
 	private clearFormat: Format;
+	private border: Border | undefined;
+
 	private pixels: Pixel[][];
 
 	public constructor(width: number, 
 					   height: number, 
 					   clearChar: string = ' ', 
-					   clearFormat: Format = {background:'', foreground:''}
+					   clearFormat: Format = {background:'', foreground:''},
+					   border?: Border
 					){
-		this.width = width;
-		this.height = height;
+		if(border !== undefined) {
+			this.border = border;
+			this.borderWidth = 1;
+		}
+		this.width = width + this.borderWidth * 2;
+		this.height = height + this.borderWidth * 2;
 		this.clearChar = clearChar;
 		this.clearFormat = clearFormat;
+	
 		this.pixels = [];
 
 		//init buffer with empty pixels
@@ -612,12 +757,11 @@ class Buffer {
 
 
 	public toString(): string {
-		//TO-DO: Refactor this shit
 		let buffer: string[] = [];
 		let lastFormat: Format = {background: "", foreground: ""};
 
-		for(let y = 0; y < this.pixels.length; y++) {
-			for(let x = 0; x < this.pixels[y].length; x++) {
+		for(let y = 0; y < this.height; y++) {
+			for(let x = 0; x < this.width; x++) {
 				const pixel: Pixel = this.pixels[y][x];
 				const format: Format = pixel.format;
 
@@ -637,7 +781,7 @@ class Buffer {
 				}
 				buffer.push(pixel.char);
 			}
-			if(y !== this.pixels.length - 1) buffer.push("\n");
+			if(!(y === this.pixels.length - 1)) buffer.push("\n")
 
 		}
 
@@ -646,9 +790,10 @@ class Buffer {
 	
 		return buffer.join("");
 	}
-	
+
 	public clear(): void {
 		this.pixels.forEach((str) => str.map((p) => {p.format = this.clearFormat; p.char = this.clearChar;}))
+		this.drawBorder();
 	}
 
 	public setPixel(x: number, 
@@ -656,16 +801,41 @@ class Buffer {
 					char: string,
 					format: Format 
 					): void {
+		x += this.borderWidth;
+		y += this.borderWidth
 		if(this.clip(x,y)) return;
 		this.pixels[y][x].char = char;
 		this.pixels[y][x].format = format;
 	}
 
+	public getDim(): [number, number] {return [this.width, this.height];}
+
+
 	private clip(x: number, y: number): boolean {
-		return x < 0 || x >= this.width || y < 0 || y >= this.height;
+		return x < this.borderWidth || x >= this.width - this.borderWidth || y < this.borderWidth || y >= this.height - this.borderWidth;
 	}
 
-	public getDim(): [number, number] {return [this.width, this.height];}
+
+	private drawBorder(): void {
+		if(this.border !== undefined) {
+			this.pixels[0][0] = {char:this.border.ul, format: this.border.format}
+			this.pixels[0][this.width - 1] = {char: this.border.ur, format: this.border.format}
+			this.pixels[this.height - 1][this.width - 1] = {char: this.border.br, format: this.border.format}
+			this.pixels[this.height - 1][0] = {char: this.border.bl, format: this.border.format}
+
+			//Set top/bottom border
+			for(let x = 1; x < this.width - 1; x++) {
+				this.pixels[0][x] = {char: this.border.top, format: this.border.format};
+				this.pixels[this.height - 1][x] = {char: this.border.bottom, format: this.border.format};
+			}
+
+			//Set left/right border
+			for(let y = 1; y < this.height - 1; y++) {
+				this.pixels[y][0] = {char: this.border.left, format: this.border.format};
+				this.pixels[y][this.width - 1] = {char: this.border.right, format: this.border.format};
+			}
+		}
+	}
 
 
 }
@@ -674,7 +844,20 @@ class Renderer {
 	private debugBuffer: Buffer;
 
 	public constructor(width: number, height: number, debugWidth: number = width,debugHeight: number = 1){
-		this.buffer = new Buffer(width, height, ' ');
+		const border: Border = {
+			ul: "╭",
+			ur: "╮",
+			br: "╯", 
+			bl: "╰", 
+			top: "─", 
+			bottom: "─", 
+			left: "│", 
+			right: "│", 
+			format: {background:'', foreground:'38;5;213'},
+			width: 1
+		}
+
+		this.buffer = new Buffer(width, height, ' ', {background:"", foreground:""}, border);
 		this.debugBuffer = new Buffer(debugWidth, debugHeight, '', {background:"", foreground:"38;5;196"});
 	}
 
