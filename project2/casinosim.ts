@@ -1,5 +1,7 @@
-import readline from "readline"
-import fs from "fs"
+import readline from "readline";
+import fs from "fs";
+import * as Util from "./utility";
+import path from "path";
 
 interface IState {
 	enter(): void;
@@ -33,12 +35,15 @@ abstract class Gambler {
 		return this.hitTarget() || this.isBankrupt();
 	}
 
-	public abstract getBet(): number;
+	public makeSelection(min: number, max: number): number {
+		return Util.randInRange(min,max,true);
+	}
+ 	public abstract getBet(): number;
 	public getName(): string {return this.name;}
 	public getMoney(): number {return this.money;}
 	public getTarget(): number {return this.target;}
 	public addMoney(amount: number): void {this.money += amount;}
-	public removeMovey(amount: number): void {this.money -= amount;}
+	public removeMoney(amount: number): void {this.money -= amount;}
 	
 }
 
@@ -70,8 +75,8 @@ class GamblerFactory {
 			const randName: string = this.config.names[Math.ceil(Math.random() * this.config.names.length)]
 			switch(randType) {
 				case 1: 
-					const balance: number = GamblerFactory.randInRange(this.config.stable.balance.lo, this.config.stable.balance.hi);
-					const betPercent: number = GamblerFactory.randInRange(this.config.stable.bet.lo, this.config.stable.bet.hi);
+					const balance: number = Util.randInRange(this.config.stable.balance.lo, this.config.stable.balance.hi,false);
+					const betPercent: number = Util.randInRange(this.config.stable.bet.lo, this.config.stable.bet.hi,false);
 					gamblers.push(new StableGambler(randName, balance,Math.ceil(balance * betPercent)))
 			}
 		}
@@ -79,9 +84,6 @@ class GamblerFactory {
 		return gamblers;
 	}
 
-	private static randInRange(min: number, max: number): number {
-		return Math.random() * (max - min) + min;
-	}
 }
 
 class StateMachine {
@@ -91,10 +93,10 @@ class StateMachine {
 		this.stateStack = [];
 	}
 
-	public enterState(state: IState): void {
+	public enterState(state: IState, active: boolean = true): void {
 		this.getCurrentState()?.exit();
 		this.stateStack.push(state);
-		state.enter();
+		if(active) state.enter();
 	}
 
 	public replaceState(state: IState): void {
@@ -112,28 +114,6 @@ class StateMachine {
 		if(this.stateStack.length === 0) return undefined;
 		return this.stateStack[this.stateStack.length - 1];
 	}
-}
-
-//Abstract class for handling Game logic, is also a state
-abstract class Game extends StateMachine implements IState{
-	private name: string;
-	private book: Map<Gambler, number>;
-	private players: Gambler[];
-
-	public constructor(name: string, players: Gambler[]) {
-		super();
-		this.name = name;
-		this.players = players;
-		this.book = new Map();
-	}
-
-	abstract enter(): void;
-	abstract exit(): void;
-	abstract update(manager: StateMachine, keyHandler : KeyEventHandler): void;
-	abstract render(renderer: Renderer): void;
-
-	public getName(): string {return this.name;}
-	public getBook(): Map<Gambler, number> {return this.book;}	
 }
 
 class InfoScreen implements IState {
@@ -166,10 +146,275 @@ class InfoScreen implements IState {
 	}
 }
 
+class GuineaPig {
+	private name: string;
+
+	private payout: number;
+	private won: boolean;
+	private finished: boolean;
+
+	private currentPosition: number;
+	private speed: number;
+
+	public constructor(name: string, payout: number, speed: number) {
+		this.name = name;
+
+		this.payout = payout;
+		this.won = false;
+		this.finished = false;
+
+		this.currentPosition = 0;
+		this.speed = speed;
+	}
+	public tick(): void {
+		if(!this.finished) this.currentPosition += this.speed;
+
+	}
+
+	public toString(): string {
+		return " ".repeat(Math.round(this.currentPosition)) + "-()> ";
+	}
+
+	public stop():void {this.finished = true;}
+	public isWinner(): boolean {return this.won;}
+
+	public getName(): string {return this.name;}
+	public getPosition(): number {return this.currentPosition;}
+	public getPayout(): number {return this.payout;}
+	public setWinner(flag: boolean): void { this.won = flag;}
+}
+
 enum GameState {
 	PLAYING,
 	DISPLAYING,
 }
+
+class OffTrackGPR implements IState {
+	private static NUM_PIGS: number = 4;
+	private static MIN_SPEED: number = 0.1;
+	private static MAX_SPEED: number = .5;
+	private static OFFSET: number = 0.2;
+	private static TRACK_LENGTH: number = 72;
+
+	private tui: Tui;
+	private tuiSource: string;
+
+	private state: GameState;	
+	private book: Map<Gambler, number>;
+
+	private pigs: GuineaPig[];
+	private choices: Map<Gambler, GuineaPig>;
+	private casinoMoney: number;
+
+	public constructor(gamblers: Gambler[], book: Map<Gambler, number>, tuiSource: string) {
+		this.tui = new Tui(tuiSource,"game");	
+		this.tuiSource = tuiSource;
+
+		this.state = GameState.PLAYING;
+		this.book = book;
+		this.casinoMoney = 0;
+		
+		
+		const names: string[] = ["Furious Fred", "Super Sally", "Cupcake", "Darting Darius"];
+		const payouts: number[] = [1.9,3.8,7.6,7.6];
+		const winChances: number[] = [.50,.25,.125,.125];
+
+
+		const winnerIndex: number = Util.weightedRandomIndex(winChances);
+		const winnerSpeed: number = Math.random() * OffTrackGPR.MAX_SPEED;
+		let speeds: number[] = [1,1,1,1];
+		speeds = speeds.map((speed: number) => Util.randInRange(OffTrackGPR.MIN_SPEED, winnerSpeed));
+		speeds[winnerIndex] = winnerSpeed;
+		
+		this.pigs = names.map((n: string, i: number) => new GuineaPig(n,payouts[i],speeds[i]))
+		this.pigs[winnerIndex].setWinner(true); 
+		
+		this.choices = new Map();
+
+		//Get Guinea Pig selections
+		gamblers.forEach((g: Gambler) => (this.choices.set(g, this.pigs[g.makeSelection(0,3)])));
+	}
+
+	public enter(): void {}
+	public exit(): void {}
+
+	public update(manager: StateMachine, keyHandler: KeyEventHandler): void {
+		switch(this.state) {
+			case(GameState.PLAYING): {
+				if(keyHandler.keyPressed("\r")) {
+					this.state = GameState.DISPLAYING;
+					return;
+				}
+
+				let foundWinner: boolean = false;
+				let stillRacing: boolean = false;
+				for(const pig of this.pigs) {
+					pig.tick();
+					if(pig.getPosition() >= OffTrackGPR.TRACK_LENGTH) {
+						pig.stop();
+					} else {
+						stillRacing = true;
+					}
+				}
+				if(!stillRacing) this.state = GameState.DISPLAYING;
+				break;
+			}
+			case(GameState.DISPLAYING) : {
+				if(keyHandler.keyPressed("\r")) {
+					const winners: Map<Gambler, number> = this.updateBalances();
+					const args: Map<string, string | string[]> = new Map();
+
+					let names: string[] = Array.from(winners.keys()).map((g: Gambler) => g.getName());
+					let winnings: string[] = Array.from(winners.values()).map((win: number) => win.toFixed(2));
+
+					names.push("Casino");
+					winnings.push(this.casinoMoney.toFixed(2));
+					
+					args.set("name", names)
+					args.set("winning", winnings);
+					
+					manager.replaceState(new InfoScreen(this.tuiSource,"summary",args));
+				}
+				break;
+			}
+		}
+	}
+
+	public render(renderer: Renderer): void {
+		const args: Map<string, string | string[]> = new Map();
+
+		let names: string[] = Array.from(this.choices.keys()).map((g: Gambler) => (g.getName()));
+		let choices: string[] = Array.from(this.choices.values()).map((p: GuineaPig) => (p.getName()));
+		let pigNames: string[] = this.pigs.map((p: GuineaPig) => (p.getName()));
+		let pigPositions: string[] = this.pigs.map((p: GuineaPig) => (p.toString()));
+
+		args.set("name", names);
+		args.set("choice", choices);
+		args.set("pigName", pigNames);
+		args.set("pigPosition", pigPositions);
+
+		this.tui.getComponents().forEach(component => {component.fill(args); component.render(renderer)});
+	}
+
+	private updateBalances(): Map<Gambler, number> {
+		const winners: Map<Gambler, number> = new Map();
+
+		for(const [gambler, bet] of this.book) {
+			const pig: GuineaPig | undefined = this.choices.get(gambler);
+			
+			if(!pig) throw new Error(`Unknown player ${gambler}`);
+			
+			if(pig.isWinner()) {
+				const winnings: number = bet * pig.getPayout();
+				this.casinoMoney -= winnings;
+				winners.set(gambler, winnings);
+				gambler.addMoney(winnings);
+			} else {
+				gambler.removeMoney(bet);
+				this.casinoMoney += bet;
+			}
+		}
+
+		return winners;
+	}
+
+}
+class TailsIWinSimulation implements IState {
+	private tui: Tui;
+	private tuiSource: string;
+
+	private state: GameState;	
+	private book: Map<Gambler, number>;
+
+	private outcome: boolean;
+	private coin: boolean;
+	private casinoMoney: number;
+
+	public constructor(gamblers: Gambler[], book: Map<Gambler, number>, tuiSource: string) {
+		this.tui = new Tui(tuiSource,"game");	
+		this.tuiSource = tuiSource;
+
+		this.state = GameState.PLAYING;
+		this.book = book;
+		this.casinoMoney = 0;
+		
+		this.outcome = Math.round(Math.random()) === 0;
+		this.coin = false;
+	}
+
+	public enter(): void {}
+	public exit(): void {}
+
+	public update(manager: StateMachine, keyHandler: KeyEventHandler) {
+		switch (this.state) {
+			case GameState.PLAYING: {
+				this.coin = !this.coin;
+				if(keyHandler.keyPressed("\r")) {
+					this.state = GameState.DISPLAYING;
+				}
+				break;
+			}
+			case GameState.DISPLAYING: {
+				if(keyHandler.keyPressed("\r")) {
+					//Updates winners, then creates a new info screen with the winners and their winnings
+					const winners: Map<Gambler, number> = this.updateBalances();
+					const args: Map<string, string | string[]> = new Map();
+
+					let names: string[] = Array.from(winners.keys()).map((g: Gambler) => g.getName());
+					let winnings: string[] = Array.from(winners.values()).map((win: number) => win.toFixed(2));
+
+					names.push("Casino");
+					winnings.push(this.casinoMoney.toFixed(2));
+					
+					args.set("name", names)
+					args.set("winning", winnings);
+					
+					manager.replaceState(new InfoScreen(this.tuiSource,"summary",args));
+				}
+				break;
+			}
+		}
+	}
+
+	public render(renderer: Renderer) {
+		const args: Map<string, string | string[]> = new Map();
+		args.set("coin", this.getCoin());
+		this.tui.getComponents().forEach(component => {component.fill(args); component.render(renderer)});
+	}
+	
+
+	private updateBalances(): Map<Gambler, number> {
+		const winners: Map<Gambler, number> = new Map();
+
+		for(const [gambler, bet] of this.book) {
+			if(this.outcome) {
+				const winnings: number = 1.9 * bet;
+				gambler.addMoney(winnings);
+				winners.set(gambler, winnings)
+				this.casinoMoney -= bet;
+			} else {
+				gambler.removeMoney(bet);
+				this.casinoMoney += bet;
+			}
+		} 
+
+		return winners;
+	}
+
+	private getCoin(): string {
+		let coinToDisplay: boolean;
+		if(this.state === GameState.DISPLAYING) {
+			coinToDisplay = this.outcome;
+		} else {
+			coinToDisplay = this.coin;
+		} 
+
+		if(coinToDisplay) return "HEADS"
+		else return "TAILS" 
+	}
+
+}
+
 class GuessTheNumberSimulation implements IState {
 	private tui: Tui;
 	private number: number;
@@ -178,10 +423,10 @@ class GuessTheNumberSimulation implements IState {
 	private book: Map<Gambler, number>;
 	private guesses: Map<Gambler, number>;
 
-	private moneyGained: number;
+	private casinoMoney: number;
 
-	public constructor(gamblers: Gambler[], book: Map<Gambler, number>) {
-		this.tui = new Tui("tui/guess_tui.json","game");
+	public constructor(gamblers: Gambler[], book: Map<Gambler, number>, tuiSource: string) {
+		this.tui = new Tui(tuiSource,"game");
 		
 		//Compute the random number for this round
 		this.number = Math.ceil(Math.random() * 4);
@@ -190,16 +435,12 @@ class GuessTheNumberSimulation implements IState {
 		
 		this.book = book;
 		this.guesses = new Map();
-		this.moneyGained = 0;
-
-		// Reusing a list for the number UI because I am lazy and don't want to 
-		// implement another TUI component for dynamic text (it would be so easy)
-		
+		this.casinoMoney = 0;
+	
 		gamblers.forEach((g: Gambler) => {
-				const guess: number = Math.ceil(Math.random() * 4);
+				const guess: number = g.makeSelection(1,4);
 				this.guesses.set(g, guess);
 		});
-
 
 	}
 
@@ -217,9 +458,15 @@ class GuessTheNumberSimulation implements IState {
 					//Updates winners, then creates a new info screen with the winners and their winnings
 					const winners: Map<Gambler, number> = this.updateBalances();
 					const args: Map<string, string | string[]> = new Map();
+
+					let names: string[] = Array.from(winners.keys()).map((g: Gambler) => g.getName());
+					let winnings: string[] = Array.from(winners.values()).map((win: number) => win.toFixed(2));
+
+					names.push("Casino");
+					winnings.push(this.casinoMoney.toFixed(2));
 					
-					args.set("name", Array.from(winners.keys()).map((g: Gambler) => g.getName()))
-					args.set("winning", Array.from(winners.values()).map((bet: number) => bet.toString()));
+					args.set("name", names)
+					args.set("winning", winnings);
 					
 					manager.replaceState(new InfoScreen("tui/guess_tui.json","summary",args));
 					break;
@@ -232,18 +479,23 @@ class GuessTheNumberSimulation implements IState {
 	private updateBalances(): Map<Gambler, number> {
 		const winners: Map<Gambler, number> = new Map();
 		for(const [gambler, guess] of this.guesses) {
+			const bet: number | undefined = this.book.get(gambler);
+			if(bet === undefined) throw new Error(`Unknown player ${gambler}`)
 			if(guess === this.number) {
-				const bet: number | undefined = this.book.get(gambler);
-				if(bet !== undefined) {
-					const winnings: number = 4.5 * bet;
-					gambler.addMoney(winnings);
-					winners.set(gambler, winnings)
-				}
+				const winnings: number = 4.5 * bet;
+				gambler.addMoney(winnings);
+				winners.set(gambler, winnings)
+
+				this.casinoMoney -= winnings;
+			} else {
+				gambler.removeMoney(bet);
+				this.casinoMoney += bet;
 			}
 		}
 
 		return winners;
 	}
+
 	private getSecretNumberString(): string {
 		if(this.state === GameState.DISPLAYING) {
 			return this.number.toString();
@@ -265,40 +517,51 @@ class GuessTheNumberSimulation implements IState {
 
 		args.set("name", names);
 		args.set("guess", guesses);
-		args.set("number", [this.getSecretNumberString()]);
+		args.set("number", this.getSecretNumberString());
 
 		this.tui.getComponents().forEach(component => {component.fill(args); component.render(renderer)});
 	}
-
 }
 
-class GuessTheNumber extends Game {
+//This is really weird, and I got it from ChatGPT. I was looking for a way to pass a constructor as an argument. 
+//"new" here basically acts as a type notation for a constructor
+type StateConstructor = new (gamblers: Gambler[], book: Map<Gambler, number>, tuiSource: string) => IState;
+
+class Game extends StateMachine implements IState{
+	private name: string;
 	private gamblers: Gambler[];
+	private book: Map<Gambler, number>;
 
-	public constructor(players: Gambler[]) {
-		super("GuessTheNumber", players);
-		this.gamblers = players;
+	private simulation: StateConstructor;
+	private tuiSource: string;
 
-		const book: Map<Gambler, number> = new Map();
+	public constructor(name: string, gamblers: Gambler[], simulation: StateConstructor, tuiSource: string) {
+		super();
+		this.name = name;
+		this.gamblers = gamblers;
+		this.book = new Map();
+
+		this.simulation = simulation;
+		this.tuiSource = tuiSource;
+	}
+
+	public enter(): void {
 		const args: Map<string, string | string[]> = new Map();
-
-		const bets: number[] = [];
 
 		this.gamblers.forEach((g: Gambler) => {
 			const bet: number = g.getBet();
-			book.set(g,bet);
+			this.book.set(g,g.getBet());
 		});
 
 		//Convert Key iterator to array and map to names
-		args.set("name", Array.from(book.keys()).map((g: Gambler) => g.getName()))
-		args.set("bet", Array.from(book.values()).map((bet: number) => bet.toString()));
+		args.set("name", Array.from(this.book.keys()).map((g: Gambler) => g.getName()))
+		args.set("bet", Array.from(this.book.values()).map((bet: number) => bet.toString()));
 
-		this.enterState(new GuessTheNumberSimulation(this.gamblers, book));
-		this.enterState(new InfoScreen("tui/guess_tui.json","info",args));
-	}
-
-	public enter(): void {}
-	public exit(): void {}
+		this.enterState(new this.simulation(this.gamblers, this.book,this.tuiSource));
+		this.enterState(new InfoScreen(this.tuiSource,"info",args));
+	};
+	
+	public exit(): void {};
 
 	public update(manager: StateMachine, keyHandler : KeyEventHandler): void {
 		const currentState: IState | undefined = this.getCurrentState();
@@ -308,9 +571,13 @@ class GuessTheNumber extends Game {
 			currentState.update(this, keyHandler);
 		}
 	}
+
 	public render(renderer: Renderer): void {
 		this.getCurrentState()?.render(renderer);
 	}
+
+	public getName(): string {return this.name;}
+	public getBook(): Map<Gambler, number> {return this.book;}	
 }
 
 class Casino implements IState {
@@ -331,7 +598,7 @@ class Casino implements IState {
 
 		this.menus = new Array(2);
 		this.menus[0] = new Tui("tui/casino_tui.json","casino",callbacks);
-		this.menus[1] = new Tui("tui/extra_tui.json","extra",callbacks);
+		this.menus[1] = new Tui("tui/casino_tui.json","extra",callbacks);
 		
 		this.enterGame = false;
 		this.currentTui = 0;
@@ -344,8 +611,11 @@ class Casino implements IState {
 	}
 
 	public update(manager: StateMachine, keyHandler : KeyEventHandler): void {
-		if(this.enterGame) manager.enterState(new GuessTheNumber(this.gamblers));
-		
+		if(this.enterGame){
+			manager.enterState(new Game("TailsIWin", this.gamblers, TailsIWinSimulation, "tui/tails_tui.json"),false);
+			manager.enterState(new Game("GuessTheNumber", this.gamblers, GuessTheNumberSimulation, "tui/guess_tui.json"), false);
+			manager.enterState(new Game("OffTrackGuineaPigRacing", this.gamblers, OffTrackGPR, "tui/racing_tui.json"));
+		};
 		if(keyHandler.keyPressed("w")){this.menus[this.currentTui].changeButton(-1);}
 		if(keyHandler.keyPressed("s")) this.menus[this.currentTui].changeButton(1);
 		if(keyHandler.keyPressed("\r")) this.menus[this.currentTui].getCurrentButton().click();
@@ -358,12 +628,11 @@ class Casino implements IState {
 			.getComponents()
 			.forEach(
 				component => {
-							  	component.render(renderer)
-							});
+					component.render(renderer)
+				});
 	}
 }
 
-// Welcome to hell!
 type Format = {
 	background: string;
 	foreground: string;
@@ -373,6 +642,7 @@ interface BaseTuiSpecification {
 	x: [string, number];
 	y: [string, number];
 	format: Format;
+	args: string[];
 	visual: string[];
 }
 
@@ -387,7 +657,6 @@ interface TextComponentSpecification extends BaseTuiSpecification {
 
 interface ListComponentSpecification extends BaseTuiSpecification {
 	type: "list";
-	args: string[];
 	maxRows: number;
 }
 
@@ -397,10 +666,11 @@ type TuiSpecification = ListComponentSpecification | ButtonComponentSpecificatio
 class TuiComponent {
 	private readonly initialFormat: Format;
 	private readonly initialVisual: string[];
-	private readonly alignmentX: [string,number];
-	private readonly alignmentY: [string,number];
 	private readonly initialX: number;
 	private readonly initialY: number;
+	private readonly alignmentX: [string,number];
+	private readonly alignmentY: [string,number];
+	private readonly args: string[];
 
 	protected constructor(spec: TuiSpecification) {
 		this.initialFormat = spec.format;
@@ -413,9 +683,14 @@ class TuiComponent {
 		this.initialY = TuiComponent.computePosition(spec.y,Application.height, this.initialVisual.length);
 		this.alignmentX = spec.x;
 		this.alignmentY = spec.y;
+
+		//Just to prevent undefined checks later
+		if(!spec.args) this.args = [];
+		else this.args = spec.args;
+
 	}
 
-	public fill(args: Map<string, string | string[]>): void {return;}
+	public fill(args: Map<string, string | string[]>): void {}
 
 	public render(renderer: Renderer): void {
 		renderer.draw(this.getX(), this.getY(), this.getVisual().join("\n"),this.getFormat());
@@ -428,6 +703,7 @@ class TuiComponent {
 	protected getY(): number {return this.initialY}
 	protected getAlignmentX(): [string, number] {return this.alignmentX;}
 	protected getAlignmentY(): [string, number] {return this.alignmentY;}
+	protected getArgs(): string[] {return this.args;}
 
 
 	protected static computePosition(
@@ -465,8 +741,38 @@ class TuiComponent {
 
 //Technically unnecessary, but okay incase of future changes.
 class TextComponenet extends TuiComponent {	
+	private currentVisual:  string[];
+
 	public constructor(spec: TextComponentSpecification) {
 		super(spec);
+		this.currentVisual = super.getVisual();
+	}
+
+	public override fill(args: Map<string, string | string[]>): void {
+		let visual: string = super.getVisual().join("\n");
+
+		for(const arg of this.getArgs()) {
+			const data: string | string[] | undefined = args.get(arg);
+			if(typeof data === "string") {
+				visual = visual.replace(`\${${arg}}`,data)
+			}
+		}
+
+		this.currentVisual = visual.split("\n");
+
+	}
+
+	protected override getVisual(): string[] {return this.currentVisual;}
+
+
+	//Probably could use another level of abstraction here to prevent duplicate dynamic position functions, especially if fill is used for all componenets
+	protected override getX(): number {
+		const maxLineLength: number = Math.max(...this.currentVisual.map((str) => str.length));
+		return TuiComponent.computePosition(this.getAlignmentX(),Application.width, maxLineLength);
+	}
+
+	protected override getY(): number {
+		return TuiComponent.computePosition(this.getAlignmentY(),Application.height, this.currentVisual.length);
 	}
 
 }
@@ -501,7 +807,6 @@ class ListComponent extends TuiComponent {
 	private currentVisual: string[];
 	private currentX: number;
 	private currentY: number;
-	private args: string[];
 	private maxRows: number;
 	
 	constructor(spec: ListComponentSpecification){
@@ -510,7 +815,6 @@ class ListComponent extends TuiComponent {
 		this.currentVisual = super.getVisual();
 		this.currentX = super.getX();
 		this.currentY = super.getY();
-		this.args = spec.args;
 		this.maxRows = spec.maxRows;
 	}
 
@@ -519,7 +823,7 @@ class ListComponent extends TuiComponent {
 		const visual: string = super.getVisual().join("");
 		let list: string[] = [];
 
-		for(const arg of this.args) {
+		for(const arg of this.getArgs()) {
 			const data: string | string[] | undefined = args.get(arg);
 			if(data instanceof Array) {
 				for(let i = 0; i < data.length; i++) {
@@ -635,21 +939,11 @@ class Application extends StateMachine {
 		super();
 		this.renderer = new Renderer(Application.width,Application.height);
 		this.keyHandler = new KeyEventHandler();
-
-		if(!process.stdin.isTTY) {
-			throw new Error("Cannot run in a non-TTY console");
-		}
 		
-		readline.emitKeypressEvents(process.stdin)
-		process.stdin.setRawMode(true);
-		process.stdin.resume();
-		process.stdin.on("keypress", (str, key) => {
-			this.keyHandler.handle(str,key);
-		});
+		this.init();
 
-		process.stdin.on("resize", () => process.stdout.write('\x1Bc'));
-	
-		this.enterState(new Casino());
+		this.enterState(new Casino(), false);
+		this.enterState(new InfoScreen("tui/pretext_tui.json","info", new Map()))
 	}
 
 	public start(): void {
@@ -657,11 +951,15 @@ class Application extends StateMachine {
 		const [rendererX,rendererY] = this.renderer.getDim();
 
 		const loop = () => {
-			if(currentState == undefined) return;
-			
+			currentState = this.getCurrentState();
+
+			if(!currentState) {
+				this.exit();
+				return
+			}	
+
 			const terminalWidth = process.stdout.columns;
 			const terminalHeight = process.stdout.rows;
-	
 
 			if(terminalWidth < rendererX || terminalHeight < rendererY) {
 				this.renderer.error(`Terminal is size [${terminalWidth},${terminalHeight}], must be [${rendererX},${rendererY}]`)
@@ -670,7 +968,6 @@ class Application extends StateMachine {
 				this.renderer.clear();
 				currentState.render(this.renderer);
 				currentState.update(this, this.keyHandler);
-				currentState = this.getCurrentState();
 				this.renderer.show();
 			}
 			// Loop again after events are handled.
@@ -678,6 +975,39 @@ class Application extends StateMachine {
 		}
 		
 		loop();
+	}
+
+	//Initializes the console
+	public init(): void {
+		if(!process.stdin.isTTY) {
+			throw new Error("Cannot run in a non-TTY console");
+		}
+		
+		readline.emitKeypressEvents(process.stdin)
+		process.stdin.setRawMode(true);
+		process.stdin.resume();
+		process.on("SIGINT", () => process.exit());
+
+
+		//Handle CTRL+C first, then pipe to keyHandler
+		process.stdin.on("keypress", (str, key) => {
+			if(key.ctrl && key.name === "c") {
+				this.exit();
+			} else {
+				this.keyHandler.handle(str,key);
+			}
+		});
+
+
+		//Clear screen on resize
+		process.stdin.on("resize", () => process.stdout.write('\x1Bc'));
+	}
+
+	//Resets the console and exits
+	public exit(): void {
+		process.stdin.setRawMode(false);
+		process.stdin.pause();
+		process.exit(0);
 	}
 }
 
@@ -691,13 +1021,15 @@ class KeyEventHandler {
 	}
 
 	public handle(str: string, key: Key): void {
-		if(key.ctrl && key.name === "c") process.exit();
-		this.wasPressed.add(str);
+		if(str) this.wasPressed.add(str);
+		else if(key.sequence) this.wasPressed.add(key.sequence);
 	}
 
 	public keyPressed(key: string){
 		return this.wasPressed.delete(key);
 	}
+
+
 
 }
 
@@ -902,8 +1234,6 @@ class Renderer {
 		process.stdout.write("\n")
 		process.stdout.write((this.debugBuffer.toString()));
 
-		//Hide cursor
-		process.stdout.write("\x1b[?25l")
 	}
 	
 	public clear(): void {
