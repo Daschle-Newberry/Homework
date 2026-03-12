@@ -97,16 +97,18 @@
             "format": {"background": "47", "foreground":"30"},
 
             "visual": ["Use W and S to Navigate, CTRL + C to exit"]
-        }
-    ],
-    "extra": [
+        },
         {
             "type": "text",
             "x": ["center",0],
-            "y": ["exact",0],
-            "format": {"background":"","foreground":""},
-            "visual": ["Please give me a good grade"]       
-        },
+            "y": ["center",8],
+            "format": {"background": "", "foreground":"38;5;213"},
+            "args": ["round"],
+            "visual": ["Rounds Played: ${round}"]
+
+        }
+    ],
+    "extra": [
         {
             "type": "text",
             "x": ["center",0],

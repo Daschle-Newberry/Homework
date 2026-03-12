@@ -101,5 +101,42 @@
                 "format": {"background": "48;5;231", "foreground":"38;5;213"},
                 "visual": ["Press Enter to Continue"]
             }
+        ],
+    "left": [
+            {
+                "type": "text",
+                "x": ["center", 0],
+                "y": ["exact",3],
+                "format": {"background": "", "foreground":"38;5;213"},
+                "visual": [
+                    "╭──────────────────────╮",
+                    "│                      │",
+                    "╰──────────────────────╯"
+                    ]
+
+            },
+            {   
+                "type": "text",
+                "x" : ["center",0],
+                "y": ["exact",4],
+                "format": {"background": "", "foreground":"38;5;213"},
+                "visual": ["Gamblers who left"]
+            },
+            {
+                "type": "list",
+                "x": ["center",0],
+                "y": ["center",-1],
+                "format": {"background": "", "foreground":"37"},
+                "args": ["left", "reason"],
+                "maxRows": 8,
+                "visual": ["${left} left because they ${reason}"]
+            },
+            {
+                "type": "text",
+                "x": ["center",0],
+                "y": ["center",8],
+                "format": {"background": "48;5;231", "foreground":"38;5;213"},
+                "visual": ["Press Enter to Continue"]
+            }
         ]
 }

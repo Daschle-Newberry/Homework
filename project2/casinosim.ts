@@ -28,7 +28,7 @@ abstract class Gambler {
 	}
 
 	public isBankrupt(): boolean {
-		return this.money >= 0;
+		return this.money <= 0;
 	}
 
 	public isFinished(): boolean {
@@ -60,6 +60,63 @@ class StableGambler extends Gambler {
 	}
 }
 
+class HighRiskGambler extends Gambler {
+	private yoloAmount: number;
+	
+	public constructor(name: string, money: number, yoloAmount: number) {
+		super(name, money, 5 * money);
+		this.yoloAmount = yoloAmount;	
+	}
+
+	public getBet(): number {
+		const desiredBet: number = this.getMoney() < this.yoloAmount ? this.getMoney() : .5 * this.getMoney();
+		return Math.min(this.getMoney(), desiredBet);
+	}
+}
+
+
+class StreakGambler extends Gambler {
+	private bet: number;
+	private minimumBet: number;
+	private winMultiplier: number;
+	private lossMultiplier: number;
+
+	public constructor(
+			name: string,
+			money: number,
+			initialBet: number, 
+			minimumBet: number,
+			winMultiplier: number,
+			lossMultiplier: number,
+			target: number,
+		){
+			super(name, money, target);
+			this.bet = initialBet;
+			this.minimumBet = minimumBet;
+			this.winMultiplier = winMultiplier;
+			this.lossMultiplier = lossMultiplier;
+		}
+
+		public getBet(): number {
+			const desiredBet: number = this.bet < this.minimumBet ? this.minimumBet : this.bet;
+			return Math.min(this.getMoney(), desiredBet);
+		}
+
+		public addMoney(amount: number): void {
+			super.addMoney(amount);
+			this.bet *= this.winMultiplier;
+		}
+		public removeMoney(amount: number): void {
+			super.removeMoney(amount);
+			this.bet *= this.lossMultiplier;
+		}
+}
+
+class MartingaleGambler extends StreakGambler {
+	public constructor(name: string, money: number, initialBet: number) {
+		super(name, money, initialBet, 0, 1.0, 1.5, 2 * money);
+	}
+}
 
 class GamblerFactory {
 	private config: any;
@@ -71,13 +128,49 @@ class GamblerFactory {
 	public createGamblers(count: number): Gambler[] {
 		let gamblers: Gambler[] = []
 		for(let i = 0; i <= count; i++) {
-			const randType: number = Math.ceil(Math.random() * 1);
+			const randType: number = Util.randInRange(1,4, true);
 			const randName: string = this.config.names[Math.ceil(Math.random() * this.config.names.length)]
 			switch(randType) {
-				case 1: 
-					const balance: number = Util.randInRange(this.config.stable.balance.lo, this.config.stable.balance.hi,false);
-					const betPercent: number = Util.randInRange(this.config.stable.bet.lo, this.config.stable.bet.hi,false);
-					gamblers.push(new StableGambler(randName, balance,Math.ceil(balance * betPercent)))
+				case 1: {
+					//Stable
+					const balance: number = Util.randInRange(this.config.stable.balance.lo, this.config.stable.balance.hi);
+					const betPercent: number = Util.randInRange(this.config.stable.bet.lo, this.config.stable.bet.hi);
+					gamblers.push(new StableGambler(randName, balance, balance * betPercent));
+					break;
+				}
+				case 2: {
+					//High Risk
+					const balance: number = Util.randInRange(this.config.highrisk.balance.lo, this.config.highrisk.balance.hi);
+					const yoloPercent: number = Util.randInRange(this.config.highrisk.yolo.lo,this.config.highrisk.yolo.hi);
+					gamblers.push(new HighRiskGambler(randName, balance,balance * yoloPercent));
+					break;
+				}
+				case 3: {
+					//Streak
+					const balance: number = Util.randInRange(this.config.streak.balance.lo, this.config.streak.balance.hi);
+					const betPercent: number = Util.randInRange(this.config.streak.bet.lo, this.config.streak.bet.hi);
+					const minBetPercent: number = Util.randInRange(this.config.streak.minbet.lo, this.config.streak.minbet.hi);
+					const winMultiplier: number = Util.randInRange(this.config.streak.winmult.lo, this.config.streak.winmult.hi);
+					const lossMultiplier: number = Util.randInRange(this.config.streak.lossmult.lo, this.config.streak.lossmult.hi);
+					gamblers.push(new StreakGambler(
+									randName,
+									balance,
+									balance * betPercent, 
+									balance * betPercent * minBetPercent,
+									winMultiplier,
+									lossMultiplier,
+									balance * 6,
+								)
+							);
+					break;
+				}
+				case 4: {
+					//Martingale
+					const balance: number = Util.randInRange(this.config.stable.balance.lo, this.config.stable.balance.hi);
+					const betPercent: number = Util.randInRange(this.config.stable.bet.lo, this.config.stable.bet.hi);
+					gamblers.push(new MartingaleGambler(randName, balance, balance * betPercent));
+					break;
+				}
 			}
 		}
 
@@ -119,23 +212,17 @@ class StateMachine {
 class InfoScreen implements IState {
 	private tui: Tui;
 	private args: Map<string, string | string[]>;
-	private continue: boolean;
 
 	public constructor(config: string, tuiName: string, args: Map<string, string | string[]>) {
 		const callbacks: Map<string, ()=>void> = new Map();
-		callbacks.set("continue", () => this.continue = true);
-
 		this.tui = new Tui(config,tuiName,callbacks);
 		this.args = args
-		this.continue = false;
 	}
 	
 	public enter(): void {}
 	public exit(): void {}
 
 	public update(manager: StateMachine, keyHandler: KeyEventHandler): void {
-		if(this.continue) manager.exitState();
-
 		if(keyHandler.keyPressed("\r")) {
 			manager.exitState();	
 		}
@@ -144,7 +231,107 @@ class InfoScreen implements IState {
 	public render(renderer: Renderer): void {
 		this.tui.getComponents().forEach(component => {component.fill(this.args); component.render(renderer)});
 	}
+} 
+
+// My game state handling is SUPER convoluted since I had to quickly pivot from my original
+// implementation. I didn't realize we HAD to have game be an abstract class, so it gets messy.
+//
+// The basic flow is: Game will be updated via the Application, if game has a current substate,
+// it will update and render that substate. If it does NOT have a substate, it will either exit or 
+// update and render the simulation.
+//
+// My original solution had game being an overarching class which controlled the game states, and
+// it received a simulation to run via a passed constructor. I felt this was cleaner, but unfortunately
+// it did not fit the assignment description. This change is also responsible for the missing frame after a
+// game finishes :(
+
+abstract class Game extends StateMachine implements IState{
+	private name: string;
+	private gamblers: Gambler[];
+	private book: Map<Gambler, number>;
+	private tuiSource: string;
+
+	private shouldExit: boolean;
+	private casinoProfit: number;
+
+	public constructor(name: string, gamblers: Gambler[], tuiSource: string) {
+		super();
+		this.name = name;
+		this.gamblers = gamblers;
+		this.book = new Map();
+		this.tuiSource = tuiSource;
+
+		this.shouldExit = false;
+		this.casinoProfit = 0;
+	}
+
+	public enter(): void {
+		const args: Map<string, string | string[]> = new Map();
+
+		this.gamblers = this.gamblers.filter((g : Gambler) => !g.isFinished())
+		this.gamblers.forEach((g: Gambler) => {
+			this.book.set(g,g.getBet());
+		});
+
+		//Convert Key iterator to array and map to names
+		args.set("name", Array.from(this.book.keys()).map((g: Gambler) => g.getName()))
+		args.set("bet", Array.from(this.book.values()).map((bet: number) => bet.toFixed(2)));
+
+		this.enterState(new InfoScreen(this.tuiSource,"info",args));
+	};
+	
+	public exit(): void {};
+
+	public update(manager: StateMachine, keyHandler : KeyEventHandler): void {
+		const currentState: IState | undefined = this.getCurrentState();
+		if(currentState != undefined) {
+			currentState.update(this, keyHandler);
+		} else if (this.shouldExit) {
+			manager.exitState();
+		} else {
+			this.simulate(keyHandler);
+		}
+	}
+
+	abstract simulate(keyHandler: KeyEventHandler ): void;
+	abstract render(renderer: Renderer): void;
+
+	public getName(): string {return this.name;}
+
+	protected enterRecap(winners: Map<Gambler, number>): void {
+		const args: Map<string, string | string[]> = new Map();
+
+		let names: string[] = Array.from(winners.keys()).map((g: Gambler) => g.getName());
+		let winnings: string[] = Array.from(winners.values()).map((win: number) => win.toFixed(2));
+
+		names.push("Casino");
+		winnings.push(this.casinoProfit.toFixed(2));
+		
+		args.set("name", names)
+		args.set("winning", winnings);
+		
+		const leavers: Gambler[] = this.gamblers.filter((g: Gambler) => g.isFinished());
+		const leaversNames: string[] = leavers.map((g: Gambler) => g.getName());
+		const leaverReasons: string[] = leavers.map((g: Gambler) => {
+			if(g.isBankrupt()) return "ran out of money";
+			else return "hit their target";
+		})
+
+		args.set("left", leaversNames);
+		args.set("reason", leaverReasons);
+	
+		this.setShouldExit(true);
+		this.replaceState(new InfoScreen(this.getTuiSource(),"left",args));
+		this.enterState(new InfoScreen(this.getTuiSource(),"summary",args));
+	}
+
+	protected getBook(): Map<Gambler, number> {return this.book;}	
+	protected getGamblers(): Gambler[] {return this.gamblers;}
+	protected getTuiSource(): string {return this.tuiSource;}
+	protected setShouldExit(flag: boolean): void {this.shouldExit = flag;}
+	protected addCasinoProfit(profit: number): void {this.casinoProfit = profit;}
 }
+
 
 class GuineaPig {
 	private name: string;
@@ -189,7 +376,7 @@ enum GameState {
 	DISPLAYING,
 }
 
-class OffTrackGPR implements IState {
+class OffTrackGPR extends Game {
 	private static NUM_PIGS: number = 4;
 	private static MIN_SPEED: number = 0.1;
 	private static MAX_SPEED: number = .5;
@@ -197,24 +384,18 @@ class OffTrackGPR implements IState {
 	private static TRACK_LENGTH: number = 72;
 
 	private tui: Tui;
-	private tuiSource: string;
 
 	private state: GameState;	
-	private book: Map<Gambler, number>;
 
 	private pigs: GuineaPig[];
 	private choices: Map<Gambler, GuineaPig>;
-	private casinoMoney: number;
 
-	public constructor(gamblers: Gambler[], book: Map<Gambler, number>, tuiSource: string) {
+	public constructor(gamblers: Gambler[], tuiSource: string) {
+		super("OffTrackGPR", gamblers,tuiSource);
 		this.tui = new Tui(tuiSource,"game");	
-		this.tuiSource = tuiSource;
 
 		this.state = GameState.PLAYING;
-		this.book = book;
-		this.casinoMoney = 0;
-		
-		
+				
 		const names: string[] = ["Furious Fred", "Super Sally", "Cupcake", "Darting Darius"];
 		const payouts: number[] = [1.9,3.8,7.6,7.6];
 		const winChances: number[] = [.50,.25,.125,.125];
@@ -230,15 +411,14 @@ class OffTrackGPR implements IState {
 		this.pigs[winnerIndex].setWinner(true); 
 		
 		this.choices = new Map();
-
-		//Get Guinea Pig selections
-		gamblers.forEach((g: Gambler) => (this.choices.set(g, this.pigs[g.makeSelection(0,3)])));
 	}
 
-	public enter(): void {}
-	public exit(): void {}
+	public override enter(): void {
+		super.enter();
+		this.getGamblers().forEach((g: Gambler) => (this.choices.set(g, this.pigs[g.makeSelection(0,3)])));
+	}
 
-	public update(manager: StateMachine, keyHandler: KeyEventHandler): void {
+	public override simulate(keyHandler: KeyEventHandler): void {
 		switch(this.state) {
 			case(GameState.PLAYING): {
 				if(keyHandler.keyPressed("\r")) {
@@ -246,7 +426,6 @@ class OffTrackGPR implements IState {
 					return;
 				}
 
-				let foundWinner: boolean = false;
 				let stillRacing: boolean = false;
 				for(const pig of this.pigs) {
 					pig.tick();
@@ -262,25 +441,21 @@ class OffTrackGPR implements IState {
 			case(GameState.DISPLAYING) : {
 				if(keyHandler.keyPressed("\r")) {
 					const winners: Map<Gambler, number> = this.updateBalances();
-					const args: Map<string, string | string[]> = new Map();
-
-					let names: string[] = Array.from(winners.keys()).map((g: Gambler) => g.getName());
-					let winnings: string[] = Array.from(winners.values()).map((win: number) => win.toFixed(2));
-
-					names.push("Casino");
-					winnings.push(this.casinoMoney.toFixed(2));
-					
-					args.set("name", names)
-					args.set("winning", winnings);
-					
-					manager.replaceState(new InfoScreen(this.tuiSource,"summary",args));
+					this.enterRecap(winners);
 				}
 				break;
 			}
 		}
 	}
 
-	public render(renderer: Renderer): void {
+	public override render(renderer: Renderer): void {
+		const currentState: IState | undefined = this.getCurrentState();
+
+		if(currentState !== undefined) {
+			currentState.render(renderer);
+			return;
+		}
+
 		const args: Map<string, string | string[]> = new Map();
 
 		let names: string[] = Array.from(this.choices.keys()).map((g: Gambler) => (g.getName()));
@@ -299,19 +474,19 @@ class OffTrackGPR implements IState {
 	private updateBalances(): Map<Gambler, number> {
 		const winners: Map<Gambler, number> = new Map();
 
-		for(const [gambler, bet] of this.book) {
+		for(const [gambler, bet] of this.getBook()) {
 			const pig: GuineaPig | undefined = this.choices.get(gambler);
 			
 			if(!pig) throw new Error(`Unknown player ${gambler}`);
 			
 			if(pig.isWinner()) {
 				const winnings: number = bet * pig.getPayout();
-				this.casinoMoney -= winnings;
+				this.addCasinoProfit(-winnings);
 				winners.set(gambler, winnings);
 				gambler.addMoney(winnings);
 			} else {
 				gambler.removeMoney(bet);
-				this.casinoMoney += bet;
+				this.addCasinoProfit(bet)
 			}
 		}
 
@@ -319,33 +494,27 @@ class OffTrackGPR implements IState {
 	}
 
 }
-class TailsIWinSimulation implements IState {
+class TailsIWin extends Game {
 	private tui: Tui;
-	private tuiSource: string;
 
 	private state: GameState;	
-	private book: Map<Gambler, number>;
 
 	private outcome: boolean;
 	private coin: boolean;
-	private casinoMoney: number;
 
-	public constructor(gamblers: Gambler[], book: Map<Gambler, number>, tuiSource: string) {
+	public constructor(gamblers: Gambler[], tuiSource: string) {
+		super("TailsIWin",gamblers,tuiSource);
+
 		this.tui = new Tui(tuiSource,"game");	
-		this.tuiSource = tuiSource;
 
 		this.state = GameState.PLAYING;
-		this.book = book;
-		this.casinoMoney = 0;
 		
 		this.outcome = Math.round(Math.random()) === 0;
 		this.coin = false;
 	}
 
-	public enter(): void {}
-	public exit(): void {}
-
-	public update(manager: StateMachine, keyHandler: KeyEventHandler) {
+	
+	public override simulate(keyHandler: KeyEventHandler) {
 		switch (this.state) {
 			case GameState.PLAYING: {
 				this.coin = !this.coin;
@@ -358,25 +527,21 @@ class TailsIWinSimulation implements IState {
 				if(keyHandler.keyPressed("\r")) {
 					//Updates winners, then creates a new info screen with the winners and their winnings
 					const winners: Map<Gambler, number> = this.updateBalances();
-					const args: Map<string, string | string[]> = new Map();
-
-					let names: string[] = Array.from(winners.keys()).map((g: Gambler) => g.getName());
-					let winnings: string[] = Array.from(winners.values()).map((win: number) => win.toFixed(2));
-
-					names.push("Casino");
-					winnings.push(this.casinoMoney.toFixed(2));
-					
-					args.set("name", names)
-					args.set("winning", winnings);
-					
-					manager.replaceState(new InfoScreen(this.tuiSource,"summary",args));
+					this.enterRecap(winners);
 				}
 				break;
 			}
 		}
 	}
 
-	public render(renderer: Renderer) {
+	public override render(renderer: Renderer) {
+		const currentState: IState | undefined = this.getCurrentState();
+
+		if(currentState !== undefined) {
+			currentState.render(renderer);
+			return;
+		}
+
 		const args: Map<string, string | string[]> = new Map();
 		args.set("coin", this.getCoin());
 		this.tui.getComponents().forEach(component => {component.fill(args); component.render(renderer)});
@@ -386,15 +551,15 @@ class TailsIWinSimulation implements IState {
 	private updateBalances(): Map<Gambler, number> {
 		const winners: Map<Gambler, number> = new Map();
 
-		for(const [gambler, bet] of this.book) {
+		for(const [gambler, bet] of this.getBook()) {
 			if(this.outcome) {
 				const winnings: number = 1.9 * bet;
 				gambler.addMoney(winnings);
 				winners.set(gambler, winnings)
-				this.casinoMoney -= bet;
+				this.addCasinoProfit(-winnings)
 			} else {
 				gambler.removeMoney(bet);
-				this.casinoMoney += bet;
+				this.addCasinoProfit(bet);
 			}
 		} 
 
@@ -415,39 +580,36 @@ class TailsIWinSimulation implements IState {
 
 }
 
-class GuessTheNumberSimulation implements IState {
+class GuessTheNumber extends Game {
 	private tui: Tui;
 	private number: number;
 	private state: GameState;
 
-	private book: Map<Gambler, number>;
 	private guesses: Map<Gambler, number>;
 
-	private casinoMoney: number;
+	public constructor(gamblers: Gambler[], tuiSource: string) {
+		super("GuessTheNumber", gamblers, tuiSource);
 
-	public constructor(gamblers: Gambler[], book: Map<Gambler, number>, tuiSource: string) {
-		this.tui = new Tui(tuiSource,"game");
+		this.tui = new Tui(tuiSource, "game");
 		
 		//Compute the random number for this round
 		this.number = Math.ceil(Math.random() * 4);
 	
 		this.state = GameState.PLAYING;
 		
-		this.book = book;
 		this.guesses = new Map();
-		this.casinoMoney = 0;
-	
-		gamblers.forEach((g: Gambler) => {
-				const guess: number = g.makeSelection(1,4);
-				this.guesses.set(g, guess);
-		});
 
 	}
 
-	public enter(): void {}
-	public exit(): void {}
+	public override enter(): void {
+		super.enter();
+		this.getGamblers().forEach((g: Gambler) => {
+				const guess: number = g.makeSelection(1,4);
+				this.guesses.set(g, guess);
+		});
+	}
 
-	public update(manager: StateMachine, keyHandler: KeyEventHandler): void {
+	public override simulate(keyHandler: KeyEventHandler): void {
 		if(keyHandler.keyPressed("\r")) {
 			switch (this.state) {
 				case GameState.PLAYING: {
@@ -457,54 +619,21 @@ class GuessTheNumberSimulation implements IState {
 				case GameState.DISPLAYING: {
 					//Updates winners, then creates a new info screen with the winners and their winnings
 					const winners: Map<Gambler, number> = this.updateBalances();
-					const args: Map<string, string | string[]> = new Map();
-
-					let names: string[] = Array.from(winners.keys()).map((g: Gambler) => g.getName());
-					let winnings: string[] = Array.from(winners.values()).map((win: number) => win.toFixed(2));
-
-					names.push("Casino");
-					winnings.push(this.casinoMoney.toFixed(2));
-					
-					args.set("name", names)
-					args.set("winning", winnings);
-					
-					manager.replaceState(new InfoScreen("tui/guess_tui.json","summary",args));
+				
+					this.enterRecap(winners);
 					break;
 				}
-
 			}
 		}
 	}
 
-	private updateBalances(): Map<Gambler, number> {
-		const winners: Map<Gambler, number> = new Map();
-		for(const [gambler, guess] of this.guesses) {
-			const bet: number | undefined = this.book.get(gambler);
-			if(bet === undefined) throw new Error(`Unknown player ${gambler}`)
-			if(guess === this.number) {
-				const winnings: number = 4.5 * bet;
-				gambler.addMoney(winnings);
-				winners.set(gambler, winnings)
-
-				this.casinoMoney -= winnings;
-			} else {
-				gambler.removeMoney(bet);
-				this.casinoMoney += bet;
-			}
+	public override render(renderer: Renderer): void {
+		const currentState: IState | undefined = this.getCurrentState();
+		if(currentState !== undefined) {
+			currentState.render(renderer);
+			return;
 		}
-
-		return winners;
-	}
-
-	private getSecretNumberString(): string {
-		if(this.state === GameState.DISPLAYING) {
-			return this.number.toString();
-		} else {
-			return "?";
-		}
-	}
-
-	public render(renderer: Renderer): void {
+		
 		const args: Map<string, string | string[]> = new Map();
 
 		const names: string[] = [];
@@ -521,63 +650,34 @@ class GuessTheNumberSimulation implements IState {
 
 		this.tui.getComponents().forEach(component => {component.fill(args); component.render(renderer)});
 	}
-}
 
-//This is really weird, and I got it from ChatGPT. I was looking for a way to pass a constructor as an argument. 
-//"new" here basically acts as a type notation for a constructor
-type StateConstructor = new (gamblers: Gambler[], book: Map<Gambler, number>, tuiSource: string) => IState;
+	private updateBalances(): Map<Gambler, number> {
+		const winners: Map<Gambler, number> = new Map();
+		for(const [gambler, guess] of this.guesses) {
+			const bet: number | undefined = this.getBook().get(gambler);
+			if(bet === undefined) throw new Error(`Unknown player ${gambler}`)
+			if(guess === this.number) {
+				const winnings: number = 4.5 * bet;
+				gambler.addMoney(winnings);
+				winners.set(gambler, winnings)
+				this.addCasinoProfit(-winnings)
+			} else {
+				gambler.removeMoney(bet);
+				this.addCasinoProfit(bet);
+			}
+		}
 
-class Game extends StateMachine implements IState{
-	private name: string;
-	private gamblers: Gambler[];
-	private book: Map<Gambler, number>;
-
-	private simulation: StateConstructor;
-	private tuiSource: string;
-
-	public constructor(name: string, gamblers: Gambler[], simulation: StateConstructor, tuiSource: string) {
-		super();
-		this.name = name;
-		this.gamblers = gamblers;
-		this.book = new Map();
-
-		this.simulation = simulation;
-		this.tuiSource = tuiSource;
+		return winners;
 	}
 
-	public enter(): void {
-		const args: Map<string, string | string[]> = new Map();
-
-		this.gamblers.forEach((g: Gambler) => {
-			const bet: number = g.getBet();
-			this.book.set(g,g.getBet());
-		});
-
-		//Convert Key iterator to array and map to names
-		args.set("name", Array.from(this.book.keys()).map((g: Gambler) => g.getName()))
-		args.set("bet", Array.from(this.book.values()).map((bet: number) => bet.toString()));
-
-		this.enterState(new this.simulation(this.gamblers, this.book,this.tuiSource));
-		this.enterState(new InfoScreen(this.tuiSource,"info",args));
-	};
-	
-	public exit(): void {};
-
-	public update(manager: StateMachine, keyHandler : KeyEventHandler): void {
-		const currentState: IState | undefined = this.getCurrentState();
-		if(currentState === undefined) {
-			manager.exitState();
+	private getSecretNumberString(): string {
+		if(this.state === GameState.DISPLAYING) {
+			return this.number.toString();
 		} else {
-			currentState.update(this, keyHandler);
+			return "?";
 		}
 	}
 
-	public render(renderer: Renderer): void {
-		this.getCurrentState()?.render(renderer);
-	}
-
-	public getName(): string {return this.name;}
-	public getBook(): Map<Gambler, number> {return this.book;}	
 }
 
 class Casino implements IState {
@@ -585,6 +685,8 @@ class Casino implements IState {
 	private currentTui: number;
 	private gamblers: Gambler[];
 	private enterGame: boolean;
+	private games: Game[];
+	private roundsPlayed: number;
 
 	public constructor() {
 		const factory: GamblerFactory = new GamblerFactory("gamblers.json");
@@ -600,11 +702,25 @@ class Casino implements IState {
 		this.menus[0] = new Tui("tui/casino_tui.json","casino",callbacks);
 		this.menus[1] = new Tui("tui/casino_tui.json","extra",callbacks);
 		
+		this.games = [];
+
 		this.enterGame = false;
 		this.currentTui = 0;
+
+		this.roundsPlayed = 0;
 	}
 
-	public enter(): void {}
+	public enter(): void {
+		//reset games
+		this.games = [
+			new GuessTheNumber(this.gamblers,"tui/guess_tui.json"),
+			new OffTrackGPR(this.gamblers,"tui/racing_tui.json"),
+			new TailsIWin(this.gamblers,"tui/tails_tui.json"),
+		]
+
+		//Get rid of gamblers who have left
+		this.gamblers.filter((g: Gambler) => (!g.hitTarget || !g.isBankrupt()))
+	}
 	public exit(): void {
 		//Reset flags
 		this.enterGame = false;
@@ -612,10 +728,17 @@ class Casino implements IState {
 
 	public update(manager: StateMachine, keyHandler : KeyEventHandler): void {
 		if(this.enterGame){
-			manager.enterState(new Game("TailsIWin", this.gamblers, TailsIWinSimulation, "tui/tails_tui.json"),false);
-			manager.enterState(new Game("GuessTheNumber", this.gamblers, GuessTheNumberSimulation, "tui/guess_tui.json"), false);
-			manager.enterState(new Game("OffTrackGuineaPigRacing", this.gamblers, OffTrackGPR, "tui/racing_tui.json"));
+			this.roundsPlayed++;
+			for(let i = 0; i < this.games.length; i++) {
+				if(i == this.games.length - 1) {
+					// Only enter the last game to be added.
+					manager.enterState(this.games[i], true)
+				} else {
+					manager.enterState(this.games[i], false)
+				}
+			}
 		};
+
 		if(keyHandler.keyPressed("w")){this.menus[this.currentTui].changeButton(-1);}
 		if(keyHandler.keyPressed("s")) this.menus[this.currentTui].changeButton(1);
 		if(keyHandler.keyPressed("\r")) this.menus[this.currentTui].getCurrentButton().click();
@@ -624,10 +747,14 @@ class Casino implements IState {
 
 	public render(renderer: Renderer): void {
 		renderer.drawDebug(0,0,"hello, I am a debug statement for debugging")
+
+		const args: Map<string, string | string[]> = new Map();
+		args.set("round", this.roundsPlayed.toString());
 		this.menus[this.currentTui]
 			.getComponents()
 			.forEach(
 				component => {
+					component.fill(args);
 					component.render(renderer)
 				});
 	}

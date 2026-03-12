@@ -206,11 +206,46 @@
     "stable": {
         "balance": {
             "lo": 50,
-            "hi": 1000
+            "hi": 250
+        },
+        "bet": {
+            "lo": 0.4,
+            "hi": 0.5
+        }
+    },
+    "highrisk": {
+        "balance": {
+            "lo": 50,
+            "hi": 250
+        },
+        "yolo": {
+            "lo": 0.5,
+            "hi": 0.7
+        }
+    },
+    "streak": {
+        "balance": {
+            "lo": 50,
+            "hi": 250
         },
         "bet": {
             "lo": 0.05,
-            "hi": 0.25
+            "hi": 0.6
+        },
+        "minbet": {
+            "lo": 0.45,
+            "hi": 1.0
+        },
+        "winmult": {
+            "lo": 1.45,
+            "hi": 2.0
+        },
+        "lossmult": {
+            "lo": 0.45,
+            "hi": 0.3
         }
+
     }
+
+
 }
