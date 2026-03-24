@@ -1,24 +1,14 @@
-#include <stdio.h>
+#include <errno.h>
 #include <string.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
-#include <errno.h>
+
+#include "sgtree.h"
 
 #define MAX_INPUT_LENGTH 100
 #define NUM_CHAR_START 48
 #define NUM_CHAR_END 57
-
-typedef struct SGTreeNode {
-    int value;
-    struct SGTreeNode* left;
-    struct SGTreeNode* right;
-} SGTreeNode;
-
-typedef struct SGTree {
-    int n;
-    int q;
-    SGTreeNode* root;
-} SGTree;
 
 typedef enum {
     STRTOINT_SUCCESS,
@@ -34,11 +24,6 @@ static char* STRTOINT_ERR_STRINGS[] = {
     [STRTOINT_NONUM] = "STRTOINT_NONUM"
 };
 
-typedef enum {
-    SGTREE_SUCESS,
-    SGTREE_NOMEM,
-
-} SGTREE_ERR;
 int is_valid_num_char(char c) {
     return (NUM_CHAR_START <= c && c <= NUM_CHAR_END) || (c == '-');
 }
@@ -69,83 +54,24 @@ int str_to_int(char* str, int* num) {
     return STRTOINT_SUCCESS;
 }
 
-SGTREE_ERR sg_insert(SGTree* tree, int value) {
-    SGTreeNode* node = malloc(sizeof(SGTreeNode));
-
-    if(!node) {
-        return SGTREE_NOMEM;
-    }
-
-    node->value = value;
-    node->left = NULL;
-    node->right = NULL;
-
-    if(tree->root == NULL) {
-        tree->root = node;
-        return SGTREE_SUCESS;
-    }
-
-    SGTreeNode* parent = tree->root;
-    
-    do {
-        SGTreeNode* child = node->value < parent->value ? parent->left : parent->right;
-        if(child == NULL) {
-            if(node->value < parent->value) {
-                parent->left = node;
-            } else {
-                parent->right = node;
-            }
-            return SGTREE_SUCESS;
-        }
-        parent = child;
-    } while(1);
-
-}
-
-void sg_traverse_inorder(SGTreeNode* tree) {
-    if(tree == NULL) return;
-
-    sg_traverse_inorder(tree->left);
-    printf("Value: %d\n",tree->value);
-    sg_traverse_inorder(tree->right);
-}
-
-void sg_traverse_preorder(SGTreeNode* tree) {
-
-}
-
-void sg_traverse_postorder(SGTreeNode* tree) {
-    
-}
-
-SGTREE_ERR sg_init(SGTree** tree_ptr) {
-    SGTree* ptr = malloc(sizeof(SGTree));
-    if(!ptr) {
-        free(ptr);
-        return SGTREE_NOMEM;
-    }
-    ptr->n = 0;
-    ptr->q = 0;
-    ptr->root = NULL;
-    *tree_ptr = ptr;
-    
-    return SGTREE_SUCESS;
-}
-
 int main() {
     SGTree* tree;
     sg_init(&tree);
-
+    
     int should_exit = 0;
     while(!should_exit) {
         char input[MAX_INPUT_LENGTH];
-        fgets(input, sizeof(input), stdin);
+        char* result = fgets(input, sizeof(input), stdin);
+        //Break on EOF
+        if(result == NULL) {
+            break;
+        }
 
         char command = input[0];
         int num_arg;
         char char_arg;
         
-        if(!strchr("etqids",command)) {
+        if(!strchr("metqids",command)) {
             printf("Invalid Command: %s\n", &command);
             continue;
         }
@@ -164,14 +90,20 @@ int main() {
             }
         }
 
-
         switch(command) {
             case 'e' : {
-                //TO-DO: Implement this
+                sg_destroy(tree);
+                sg_init(&tree);
+                break;
+            }
+            case 'm' : {
+                sg_metadata(tree);
                 break;
             }
             case 't' : {
-                sg_traverse_inorder(tree->root);
+                if(char_arg == 'i') sg_traverse_inorder(tree->root);
+                else if(char_arg == 'l') sg_traverse_preorder(tree->root);
+                else sg_traverse_postorder(tree->root);
                 break;                    
             }
             case 'q' : {
@@ -197,6 +129,8 @@ int main() {
             }
         }
     }
+
+    sg_destroy(tree);
  
     return 0;
 }
