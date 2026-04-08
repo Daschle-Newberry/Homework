@@ -1,3 +1,5 @@
+//https://github.com/Daschle-Newberry/CS220HW
+
 import * as Util from "./utility";
 import readline from "readline-sync";
 import fs from "fs";
@@ -188,9 +190,9 @@ class GamblerFactory {
 }
 
 //Helper function to print a map with a string in between the key and values
-function printChoice(book: Map<IGambler, number>, text: string): void {
+function printChoice(book: Map<IGambler, number>, text: string, sigFig : number = 2): void {
     book.forEach(
-        (choice: number, g: IGambler) => console.log(`${g.getName()}${text}${choice.toFixed(2)}`)
+        (choice: number, g: IGambler) => console.log(`${g.getName()}${text}${choice.toFixed(sigFig)}`)
     );
 }
 
@@ -218,6 +220,7 @@ function printAndUpdateWinners(book: Map<IGambler, number>, choices: Map<IGamble
 
 interface ISimulation {
     simulate(book: Map<IGambler, number>): number;
+    getName(): string;
 }
 
 class TailsIWin implements ISimulation {
@@ -230,10 +233,6 @@ class TailsIWin implements ISimulation {
     }
 
     public simulate(book: Map<IGambler, number>): number {
-        console.log(this.name);
-
-        printChoice(book, " is betting $");
-
         //Map of heads vs tail choices (they can only pick heads)
         const choices: Map<IGambler, number> = new Map(
             Array.from(book.keys()).map((g: IGambler) => [g, Util.randInRange(0,0,true)])
@@ -246,6 +245,9 @@ class TailsIWin implements ISimulation {
 
         return casinoMoney;
     } 
+
+    public getName(): string { return this.name; }
+
 }
 
 
@@ -258,11 +260,7 @@ class GuessTheNumber implements ISimulation {
         this.outcome = Util.randInRange(0,4, true);
     }
 
-    public simulate(book: Map<IGambler, number>): number {
-        console.log(this.name);
-
-        printChoice(book," is betting $");
-        
+    public simulate(book: Map<IGambler, number>): number {       
         //Create map of number choices
         const choices: Map<IGambler, number> = new Map(
             Array.from(book.keys()).map((g: IGambler) => [g, Util.randInRange(0,4,true)])
@@ -276,6 +274,9 @@ class GuessTheNumber implements ISimulation {
 
         return casinoMoney;
     } 
+
+    public getName(): string { return this.name; }
+
 }
 
 class OffTrackGPR implements ISimulation {
@@ -291,16 +292,12 @@ class OffTrackGPR implements ISimulation {
     }
 
     public simulate(book: Map<IGambler, number>): number {
-        console.log(this.name);
-
-        printChoice(book," is betting $");
-        
         //Create map of pig choices 
         const choices = new Map(
             Array.from(book.keys()).map((g: IGambler) => [g, Util.randInRange(0,4,true)])
         );
 
-        printChoice(choices," is betting on Pig #");
+        printChoice(choices," is betting on Pig #", 0);
 
         console.log(`\nPig #${this.outcome} won\n`);
 
@@ -309,6 +306,8 @@ class OffTrackGPR implements ISimulation {
 
         return casinoMoney;
     } 
+
+    public getName(): string { return this.name; }
 }
 
 
@@ -336,6 +335,9 @@ class CasinoSimulator {
 
             for(const game of this.games) {
                 const book: Map<IGambler, number> = new Map(this.gamblers.map((g: IGambler) => [g, g.getBet()]));
+                
+                console.log(game.getName());
+                printChoice(book," is betting $");
 
                 const casinoMoney: number = game.simulate(book);
                 console.log(`Casino made/lost $${casinoMoney.toFixed()}`);
@@ -348,6 +350,7 @@ class CasinoSimulator {
             }
             current_round++;
         }
+        
     }
 
     public cull(): IGambler[] {
