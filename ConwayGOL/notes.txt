@@ -1,0 +1,42 @@
+Rules:
+    - Any cell with < 2 neighbors dies
+    - Any cell with two or three neighbors lives
+    - Any cell with more than three neighbors dies
+    - Any cell with exactly three live neighbors becomes alive
+
+
+
+Input:
+    - Args[0] : Number of generations to simulate:
+        - Type: short int
+        - Always Present [ERROR IF NOT PRESENT or NEGATIVE]
+    - Args[1] : Name of seed file
+        - Type: String
+        - Always present [ERROR IF NOT PRESENT or FILE DOES NOT EXIST]
+    - Args[2] : Whether the world should wrap vertically
+        - Type: Boolean as String "0" or "1"
+        - Optional, default is "0"
+    - Args[3] : Whether the world should wrap horizontally
+        - Type: Boolean as String "0" or "1"
+        - Optional, default is "0"
+
+
+Seed File Format:
+    - Line 1 Rows and columns:
+        - Type(s): Short int
+        - Two integers, seperated by whitespace
+        - Always present [ERROR IF MISSING OR LESS THAN 1]
+    - Lines 1+ State:
+        - Type: char '.' or '0'
+        - Always present [ERROR IF NUM OF '.' or '0' != ROWS * COLUMNS]
+        - Can be seperated by any amount of whitespace
+
+Error Handling:
+    - Print error to stderr
+    - Return with a code > 0
+
+
+
+
+Notes:
+    - Always output generation 0, meaning there will be generations + 1 output files

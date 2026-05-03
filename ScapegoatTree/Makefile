@@ -1,5 +1,5 @@
 CC = gcc
-CCFLAGS = -std=c99 -pedantic -Wall -fsanitize=address -lm
+CCFLAGS = -std=c99 -pedantic -Wall -fsanitize=address -g -lm
 BUILDDIR = build
 SRCDIR = src
 EXEC = tree_exe

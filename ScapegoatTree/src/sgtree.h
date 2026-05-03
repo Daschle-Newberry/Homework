@@ -3,20 +3,22 @@
 
 typedef struct SGTreeNode {
     int value;                  //< Value contained
-    int d;                      //< Depth from root
     struct SGTreeNode* left;    //< Left child
     struct SGTreeNode* right;   //< Right child
 } SGTreeNode;
 
 typedef struct SGTree {
-    int n;              // Actual depth
-    int q;              // Overestimate of depth
+    int n;              //< Actual depth
+    int q;              //< Overestimate of depth
     SGTreeNode* root;   //< Root node
 } SGTree;
 
 typedef enum {
     SGTREE_SUCESS,
+    SGTREE_NOT_FOUND,
     SGTREE_NOMEM,
+    SGTREE_INVALID_STATE,
+    SGTREE_INVALID_ARGUMENT
 } SGTREE_ERR;
 
 /**
@@ -36,6 +38,17 @@ SGTREE_ERR sg_init(SGTree** tree_ptr);
 SGTREE_ERR sg_insert(SGTree* tree, int value);
 
 
+
+/**
+ *  Delete node from given scapegoat tree
+ *  @param tree Pointer to tree which will be used for deletion
+ *  @param value Value to be deleted
+ *  @return Error code for delete
+ */
+SGTREE_ERR sg_delete(SGTree* tree, int value);
+
+SGTREE_ERR sg_search(SGTree* tree, int value);
+
 /**
  * Destroy the tree and all nodes
  * @param tree The tree which will be destroyed   
@@ -52,18 +65,18 @@ void sg_metadata(SGTree* tree);
  * Prints the in order traversal of the provided tree
  * @param tree The tree to traverse and print
  */
-void sg_traverse_inorder(SGTreeNode* tree);
+void sg_traverse_inorder(SGTreeNode* tree, int d);
 
 /**
  * Prints the pre order traversal of the provided tree
  * @param tree The tree to traverse and print
  */
-void sg_traverse_preorder(SGTreeNode* tree);
+void sg_traverse_preorder(SGTreeNode* tree, int d);
 
 /**
  * Prints the in post order traversal of the provided tree
  * @param tree The tree to traverse and print
  */
-void sg_traverse_postorder(SGTreeNode* tree);
+void sg_traverse_postorder(SGTreeNode* tree, int d);
 
 #endif
