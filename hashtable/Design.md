@@ -19,7 +19,7 @@
 	} LLNode;
 	
 	
-	LLNode* ll_find(LinkedList* ll, void* key);
+	LLNode* ll_find(LinkedList*, void* key);
 	bool ll_insert(void* key, size_t key_size, void* val);
 	
 ```
