@@ -1,32 +1,34 @@
 CCFLAGS = -fsanitize=address -fanalyzer -Wall -g -O0
 
-main.o: main.c hash_table.h
-	cc ${CCFLAGS} $< -c
-	
-hash_table.o: hash_table.c hash_table.h
-	cc ${CCFLAGS}  $< -c
+BUILDDIR = build
+SRCDIR = src
 
-linkedlist.0: linkedlist.c linkedlist.h
-	cc ${CCFLAGS} $< -c
+SRCS = $(SRCDIR)/hash_table.c $(SRCDIR)/linkedlist.c $(SRCDIR)/crc64.c $(SRCDIR)/getWord.c
+MAIN_SRCS = $(SRCDIR)/main.c
+TEST_SRCS = $(SRCDIR)/test.c
 
-crc64.o: crc64.c crc64.h
-	cc ${CCFLAGS} $< -c
+#https://stackoverflow.com/questions/28559338/makefile-to-convert-all-c-to-o
+OBJS = $(SRCS:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
+MAIN_OBJS = $(MAIN_SRCS:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
+TEST_OBJS = $(TEST_SRCS:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
 
-getWord.o: getWord.c getWord.h
-	cc ${CCFLAGS} $< -c
+pairsofwords: $(MAIN_OBJS) $(OBJS)
+	cc $(CCFLAGS) -o $(BUILDDIR)/$@ $^
 
-test.o: test.c linkedlist.o hash_table.o
-	cc ${CCFLAGS} $< -c
+test: $(TEST_OBJS) $(OBJS)
+	cc $(CCFLAGS) -o $(BUILDDIR)/$@ $^
 
-test: test.o linkedlist.o 
-	cc ${CCFLAGS} -o $@ $^
+#https://stackoverflow.com/questions/34621364/makefile-compile-o-from-c-files
+$(MAIN_OBJS) $(TEST_OBJS) $(OBJS): $(BUILDDIR)/%.o: $(SRCDIR)/%.c
+	mkdir -p $(BUILDDIR)
+	cc $(CCFLAGS) -c $< -o $@
 
 run-test: test
-	./test
+	./$(BUILDDIR)/test
 
-pairsofwords: main.o hash_table.o crc64.o getWord.o
-	cc ${CCFLAGS} -o $@ $^
+run: pairsofwords
+	./$(BUILDDIR)/pairsofwords
 
 .PHONY: clean
 clean:
-	rm pairsofwords *.o
+	rm -r $(BUILDDIR)
