@@ -1,19 +1,16 @@
-#include <string.h>
 #include <stdlib.h>
 #include <stddef.h>
 #include <stdio.h>
 
-#include <assert.h>
 #include "linkedlist.h"
 
-LinkedList* ll_init() {
+LinkedList* ll_init(CmpFn cmp) {
   LinkedList* list = malloc(sizeof (LinkedList));
-  
-  assert(list);
 
   if(!list)
     return NULL;
 
+  list->cmp = cmp;
   list->head = NULL;
   list->len = 0;
 
@@ -21,56 +18,54 @@ LinkedList* ll_init() {
 }
 
 void ll_destroy(LinkedList* list) {
+ if(!list)
+   return;
+
   LLNode* cursor = list->head;
-  while(cursor) { 
+  while(cursor) {
+    LLNode* next = cursor->next;
     llnode_destroy(cursor);
-    cursor = cursor->next;
-  } 
+    cursor = next;
+  }
+
   free(list);
 }
 
 void llnode_destroy(LLNode* node) {
   free(node->key);
+  free(node->val);
   free(node);
 }
 
-LLNode* llnode_init(const char* key, int val) {
+LLNode* llnode_init(void* key, void* val) {
   LLNode* node = malloc(sizeof (LLNode));
  
   if(!node)
     return NULL;
   
   node->next = NULL;
-
-  size_t  len = strlen((char*) key) + 1;
-  node->key = (char*) malloc(len * sizeof (char));
-  int n = snprintf(node->key, len, "%s", (char*) key);
-  
-  // Failure to copy entire string
-  if(n < (len - 1)) {
-    free(node);
-    assert(0);
-    return NULL;
-  }
-
+  node->key = key;
   node->val = val;
-  
+
   return node;
 }
 
-int ll_insert(LinkedList* list, const void* key, const void* val) {
+int ll_insert(LinkedList* list, void* key, void* val) {
   if(list == NULL) 
     return -1;
-  
+
   LLNode* prev;
   if((prev = ll_find(list, key))) {
-    prev->val = *(int*) val;
+    // Free the replaced value and the inserted key to maintain ownership contract
+    free(prev->val);
+    free(key);
+
+    prev->val = val;
     return 0;
   }
 
-  LLNode* node = llnode_init((char*)key, *(int*)val);
+  LLNode* node = llnode_init(key, val);
   
-  assert(node);
   if(!node)
     return -1;
   
@@ -82,14 +77,11 @@ int ll_insert(LinkedList* list, const void* key, const void* val) {
 }
 
 LLNode* ll_find(const LinkedList* list, const void* key) {
-  if(!list | !key)
+  if(!list || !key)
     return NULL;
-
-  char* keyStr = (char*) key; 
-  LLNode* cursor = list->head;
  
-  for(LLNode* cursor = list->head; cursor != NULL; cursor = cursor->next) {
-    if(strcmp(cursor->key, keyStr) == 0)
+  for(LLNode* cursor = list->head; cursor != NULL; cursor = cursor->next) {  
+    if(list->cmp(key, cursor->key) == 0)
       return cursor;
   }
   
