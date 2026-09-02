@@ -3,12 +3,14 @@
 
 #include <stddef.h>
 
+#include "types.h"
+
 typedef struct LLNode LLNode;
-typedef int (*CmpFn)(const void* a, const void* b);
 
 typedef struct LinkedList {
   LLNode* head;
   CmpFn cmp;
+  DstrFn key_dstr, val_dstr;
   size_t len;
 } LinkedList;
 
@@ -21,11 +23,18 @@ struct LLNode {
 
 /*
 * @brief Initializes a new linked list 
+* 
+* @param list The list to initialize
+* @param cmp A pointer to a comparison function
+* @param key_dstr A pointer to a destructor function for the keys
+* @param val_dstr A pointer to a destructor function for the values 
+*
+* @return 0 on success, -1 on failure
 * */
-LinkedList* ll_init(CmpFn cmp);
+int ll_init(LinkedList* list, CmpFn cmp, DstrFn key_dstr, DstrFn val_dstr);
 
 /*
-* @brief Destroys the given linked list 
+* @brief Destroys the given linked list, does not free the list itself
 *
 * @param node The list to be destroyed
 * 
@@ -33,7 +42,7 @@ LinkedList* ll_init(CmpFn cmp);
 void ll_destroy(LinkedList* list);
 
 /*
- * @brief Initializes a new LLNode 
+ * @brief Creates a new LLNode 
  *
  * @note Upon successful insertion, ownership of key and val is transferred to the list node
  *
@@ -42,15 +51,17 @@ void ll_destroy(LinkedList* list);
  * 
  * @return The new node, or NULL on failure
  * */
-LLNode* llnode_init(void* key, void* val);
+LLNode* llnode_create(void* key, void* val);
 
 /*
 * @brief Destroys the given node 
 *
 * @param node The node to be destroyed
-* 
+* @param key_dstr The destructor used for the key
+* @param val_dstr The destructor used for the value
+*
 * */
-void llnode_destroy(LLNode* node);
+void llnode_destroy(LLNode* node, DstrFn key_dstr, DstrFn val_dstr);
 
 /*
  * @brief Inserts a new node into the linked list, overwriting val if key already exists

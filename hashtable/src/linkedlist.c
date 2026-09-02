@@ -4,17 +4,17 @@
 
 #include "linkedlist.h"
 
-LinkedList* ll_init(CmpFn cmp) {
-  LinkedList* list = malloc(sizeof (LinkedList));
-
-  if(!list)
-    return NULL;
+int  ll_init(LinkedList* list, CmpFn cmp, DstrFn key_dstr, DstrFn val_dstr) {
+  if(!list || !cmp || !key_dstr || !val_dstr)
+    return -1;
 
   list->cmp = cmp;
+  list->key_dstr = key_dstr;
+  list->val_dstr = val_dstr;
   list->head = NULL;
   list->len = 0;
 
-  return list;
+  return 0;
 }
 
 void ll_destroy(LinkedList* list) {
@@ -24,20 +24,18 @@ void ll_destroy(LinkedList* list) {
   LLNode* cursor = list->head;
   while(cursor) {
     LLNode* next = cursor->next;
-    llnode_destroy(cursor);
+    llnode_destroy(cursor, list->key_dstr, list->val_dstr);
     cursor = next;
   }
-
-  free(list);
 }
 
-void llnode_destroy(LLNode* node) {
-  free(node->key);
-  free(node->val);
+void llnode_destroy(LLNode* node, DstrFn key_dstr, DstrFn val_dstr) {
+  key_dstr(node->key);
+  val_dstr(node->val);
   free(node);
 }
 
-LLNode* llnode_init(void* key, void* val) {
+LLNode* llnode_create(void* key, void* val) {
   LLNode* node = malloc(sizeof (LLNode));
  
   if(!node)
@@ -57,14 +55,14 @@ int ll_insert(LinkedList* list, void* key, void* val) {
   LLNode* prev;
   if((prev = ll_find(list, key))) {
     // Free the replaced value and the inserted key to maintain ownership contract
-    free(prev->val);
-    free(key);
+    list->key_dstr(key);
+    list->val_dstr(prev->val);
 
     prev->val = val;
     return 0;
   }
 
-  LLNode* node = llnode_init(key, val);
+  LLNode* node = llnode_create(key, val);
   
   if(!node)
     return -1;
@@ -79,7 +77,7 @@ int ll_insert(LinkedList* list, void* key, void* val) {
 LLNode* ll_find(const LinkedList* list, const void* key) {
   if(!list || !key)
     return NULL;
- 
+
   for(LLNode* cursor = list->head; cursor != NULL; cursor = cursor->next) {  
     if(list->cmp(key, cursor->key) == 0)
       return cursor;

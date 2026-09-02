@@ -4,6 +4,8 @@
 #include <assert.h>
 
 #include "linkedlist.h"
+#include "hash_table.h"
+#include "crc64.h"
 
 #define ASSERT_ON_FAIL
 
@@ -19,7 +21,7 @@
       printf("  PASS: %s\n", teststr); \
     else  \
       printf("  FAIL: %s (expected %d, got %d)\n",teststr, _expected, _actual); \
-      assert(_expected == _actual); \
+    assert(_expected == _actual); \
   }while(0); \
 
 #define EXPECT_NEQ(teststr, expected, actual) \
@@ -30,7 +32,7 @@
       printf("  PASS: %s\n", teststr); \
     else \
       printf("  FAIL: %s (expected %d, got %d)\n",teststr, _expected, _actual); \
-      assert(_expected != _actual); \
+    assert(_expected != _actual); \
   }while(0); \
 
 
@@ -58,12 +60,14 @@
 
 #endif
 
+void test_ht_insert();
 void test_ll_insert();
 void test_ll_find();
 
 int main() {
   test_ll_insert();
   test_ll_find();
+  test_ht_insert();
   return 0;
 }
 
@@ -71,15 +75,47 @@ int string_compare(const void* a, const void* b) {
   return strcmp((char*)a, (char*)b);
 }
 
+unsigned long long hash(const void* data) {
+  return crc64((char*)data);
+}
 
+
+void test_ht_insert() {
+  puts("Testing ht_insert...");
+  HashTable table;
+
+  ht_init(&table, &string_compare, &hash, &free, &free);
+  
+  int* v1 = malloc(sizeof(int));
+  *v1 = 0;    
+
+  EXPECT_EQ("Insert into empty, returns 0", 0, ht_insert(&table, strdup("Hello"), v1));
+  EXPECT_EQ("Insert into empty, value is 0", *v1, *(int*)ht_find(&table, "Hello"));
+
+  int* v2 = malloc(sizeof(int));
+  *v2 = 1;
+  EXPECT_EQ("Insert into non-empty, returns 0", 0, ht_insert(&table, strdup("World!"), v2));
+  EXPECT_EQ("Insert into non-empty, value is 1", *v2, *(int*)ht_find(&table, "World!"));
+
+  ht_destroy(&table);
+}
+// Suppress static analysis complaining about my unchecked use of malloc
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-possible-null-dereference"
 void test_ll_insert() {
   puts("Testing ll_insert...");
 
-  LinkedList list = { .head = NULL, .len = 0, .cmp = &string_compare};
+  LinkedList list = {
+    .head = NULL, 
+    .len = 0, 
+    .cmp = &string_compare, 
+    .key_dstr = &free, 
+    .val_dstr = &free
+  };
   
   int* val1 = malloc(4);
   *val1 = 1;
-  int insertEmptyResult = ll_insert(&list, strdup("Hello"), val1);
+  int insertEmptyResult = ll_insert(&list, strdup("Hello"), val1); 
   
   EXPECT_EQ("Insert into empty, returns zero", 0, insertEmptyResult);
   EXPECT_EQ("Inserted into empty, key is 'Hello'", 0, strcmp("Hello", list.head->key));
@@ -104,14 +140,20 @@ void test_ll_insert() {
   EXPECT_EQ("Insert replace node, original node value equal 3", *val3, *(int*)originalHead->val);
   EXPECT_EQ("Insert replace node, len is equal to 2", 2, list.len);
 
-  llnode_destroy(originalHead);
-  llnode_destroy(list.head);
+  llnode_destroy(originalHead, list.key_dstr, list.val_dstr);
+  llnode_destroy(list.head, list.key_dstr, list.val_dstr);
 }
 
 void test_ll_find() {
   puts("Testing ll_find");
 
-  LinkedList list = { .head = NULL, .len = 0, .cmp = &string_compare };
+  LinkedList list = { 
+    .head = NULL, 
+    .len = 0, 
+    .cmp = &string_compare,
+    .key_dstr = &free,
+    .val_dstr = &free
+  };
 
   LLNode* res = ll_find(&list, "Hi");
 
@@ -119,7 +161,7 @@ void test_ll_find() {
   
   int* zero = malloc(4);
   *zero = 0;
-  LLNode* lastNode = llnode_init(strdup("0"), zero);
+  LLNode* lastNode = llnode_create(strdup("0"), zero);
   list.head = lastNode;
 
   for(int i = 0; i < 100; i++) {
@@ -129,7 +171,7 @@ void test_ll_find() {
     snprintf(key, 4, "%d", i);
     *val = i;
 
-    LLNode* node = llnode_init(key, val);
+    LLNode* node = llnode_create(key, val);
     lastNode->next = node;
     lastNode = node;
   }
@@ -157,8 +199,9 @@ void test_ll_find() {
   LLNode* cursor = list.head;
   while(cursor) {
     LLNode* next = cursor->next;
-    llnode_destroy(cursor);
+    llnode_destroy(cursor, list.key_dstr, list.val_dstr);
     cursor = next;
   }
 }
 
+#pragma GCC diagnostic pop
