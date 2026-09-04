@@ -12,6 +12,10 @@ typedef struct HashTable {
   HashFn hash;
 } HashTable;
 
+typedef struct KVPair {
+  const void* key;
+  const void* val;
+} KVPair;
 
 /*
 * @brief Initializes a new hash table 
@@ -57,4 +61,14 @@ int ht_insert(HashTable* table, void* key, void* val);
  * */
  const void* ht_find(const HashTable* table, const void* key);
 
+/*
+ * @brief Creates an array for all key/val pairs in the table
+ *
+ * @param table The table to flatten
+ * @count count Pointer to an integer where the array count will be stored
+ *
+ * @return A pointer to the flattened array
+ */
+
+ KVPair* ht_to_array(const HashTable* table, size_t* count);
 #endif

@@ -9,9 +9,9 @@ typedef struct LLNode LLNode;
 
 typedef struct LinkedList {
   LLNode* head;
+  size_t len;
   CmpFn cmp;
   DstrFn key_dstr, val_dstr;
-  size_t len;
 } LinkedList;
 
 struct LLNode {
@@ -35,7 +35,7 @@ int ll_init(LinkedList* list, CmpFn cmp, DstrFn key_dstr, DstrFn val_dstr);
 
 /*
 * @brief Destroys the given linked list, does not free the list itself
-*
+
 * @param node The list to be destroyed
 * 
 * */
@@ -86,5 +86,16 @@ int ll_insert(LinkedList* list, void* key, void* val);
  * */
 LLNode* ll_find(const LinkedList* list, const void* key);
 
+
+/*
+ * @brief Calculates the length of the given list
+ *
+ * @note This is primarily used for testing within the scope fo this project
+ *
+ * @param The list to find the length og
+ *
+ * @returns Length
+ * */
+size_t ll_len(const LinkedList* list);
 #endif
 

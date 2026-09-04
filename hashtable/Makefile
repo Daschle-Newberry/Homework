@@ -1,16 +1,19 @@
-CCFLAGS = -fsanitize=address -fanalyzer -Wall -g -O0
-
+#CCFLAGS = -fsanitize=address -fanalyzer -Wall -g -O0
+CCFLAGS = 
 BUILDDIR = build
 SRCDIR = src
+TESTDIR = tests
 
 SRCS = $(SRCDIR)/hash_table.c $(SRCDIR)/linkedlist.c $(SRCDIR)/crc64.c $(SRCDIR)/getWord.c
 MAIN_SRCS = $(SRCDIR)/main.c
-TEST_SRCS = $(SRCDIR)/test.c
+TEST_SRCS = $(TESTDIR)/test.c
 
 #https://stackoverflow.com/questions/28559338/makefile-to-convert-all-c-to-o
 OBJS = $(SRCS:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
 MAIN_OBJS = $(MAIN_SRCS:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
 TEST_OBJS = $(TEST_SRCS:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
+
+ARGS =
 
 pairsofwords: $(MAIN_OBJS) $(OBJS)
 	cc $(CCFLAGS) -o $(BUILDDIR)/$@ $^
@@ -27,7 +30,10 @@ run-test: test
 	./$(BUILDDIR)/test
 
 run: pairsofwords
-	./$(BUILDDIR)/pairsofwords
+	./$(BUILDDIR)/pairsofwords $(ARGS)
+
+zip: 
+	zip -r src.zip $(SRCDIR) Makefile
 
 .PHONY: clean
 clean:
