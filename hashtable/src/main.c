@@ -28,30 +28,34 @@ int main(int argc, char **argv) {
 	// word pair counting logic using hash table goes here
   
   // Argv lacks count, at least one file, or both
-  if(argc < 3) { 
-    fprintf(stderr, "pairsofwords: invalid set of arguments (was a count and file provided?)\n");
+  if(argc < 2) { 
+    fprintf(stderr, "pairsofwords: invalid set of arguments\n");
     return -1;
   }
   
-  char* end;
-  long count = strtol(argv[1], &end, 0);
-  
-  if(errno == ERANGE || count < 1) {
-    fprintf(stderr, "pairsofwords: %ld: count must be within 1 and %ld\n", count, LONG_MAX);
-    return -1;
+
+  int first_file = 1;
+  size_t count = ULONG_MAX;
+  if(argv[1][0] == '-') {
+    first_file = 2;
+    char* end;
+    count = strtoul(&argv[1][1], &end, 0);
+    
+    if(errno == ERANGE || count < 1) {
+      fprintf(stderr, "pairsofwords: %lu: count must be within 1 and %lu\n", count, ULONG_MAX);
+      return -1;
+    }
+
+    if(*end != '\0') {
+      fprintf(stderr, "pairsofwords: %s: invalid count string", &argv[1][0]);
+      return -1;
+    }
   }
-  
-  // Count MUST be a single integer, nothing else
-  if(*end != '\0') {
-    fprintf(stderr, "pairsofwords: %s: invalid count string\n", argv[1]);
-    return -1;
-  }
-  
 
   HashTable tb;
   ht_init(&tb, &string_compare, &string_hash, &free, &free);
-
-  for(int i = 2; i < argc; i++) {
+  
+  for(int i = first_file; i < argc; i++) {
     FILE* f = fopen(argv[i], "r");
     if(!f) {
       fprintf(stderr, "pairsofwords: %s: could not open file\n", argv[i]);
@@ -82,15 +86,17 @@ int main(int argc, char **argv) {
     }
 
     free(last_word);
+    fclose(f);
   }
 
-  size_t n;
-  KVPair* kvp = ht_to_array(&tb, &n);
+  size_t num_eles;
+  KVPair* kvp = ht_to_array(&tb, &num_eles);
 
   assert(kvp);
-  qsort(kvp, n, sizeof(KVPair), &kv_compare);
+  qsort(kvp, num_eles, sizeof(KVPair), &kv_compare);
 
-  for(int i = 0; i < n && i < count; i++) {
+  size_t n = (count < num_eles) ? count : num_eles;
+  for(int i = 0; i < n; i++) {
     printf("%10d %s\n", *(int*) kvp[i].val, (char*) kvp[i].key);
   }
 

@@ -2,11 +2,10 @@
 CCFLAGS = 
 BUILDDIR = build
 SRCDIR = src
-TESTDIR = tests
 
 SRCS = $(SRCDIR)/hash_table.c $(SRCDIR)/linkedlist.c $(SRCDIR)/crc64.c $(SRCDIR)/getWord.c
 MAIN_SRCS = $(SRCDIR)/main.c
-TEST_SRCS = $(TESTDIR)/test.c
+TEST_SRCS = $(SRCDIR)/test.c
 
 #https://stackoverflow.com/questions/28559338/makefile-to-convert-all-c-to-o
 OBJS = $(SRCS:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
@@ -33,8 +32,8 @@ run: pairsofwords
 	./$(BUILDDIR)/pairsofwords $(ARGS)
 
 zip: 
-	zip -r src.zip $(SRCDIR) Makefile
-
+	cp src/* autolab
+	zip -r autolab.zip autolab
 .PHONY: clean
 clean:
 	rm -r $(BUILDDIR)
