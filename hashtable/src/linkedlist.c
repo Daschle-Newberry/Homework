@@ -8,12 +8,14 @@ int  ll_init(LinkedList* list, CmpFn cmp, DstrFn key_dstr, DstrFn val_dstr) {
   if(!list || !cmp || !key_dstr || !val_dstr)
     return -1;
 
-  list->cmp = cmp;
-  list->key_dstr = key_dstr;
-  list->val_dstr = val_dstr;
-  list->head = NULL;
-  list->len = 0;
-
+  *list = (LinkedList) {
+    .head = NULL,
+    .len = 0,
+    .cmp = cmp,
+    .key_dstr = key_dstr,
+    .val_dstr = val_dstr
+  };
+ 
   return 0;
 }
 
@@ -74,6 +76,16 @@ int ll_insert(LinkedList* list, void* key, void* val) {
   return 0;
 }
 
+
+int ll_splice_node(LinkedList* list, LLNode* node) {
+  if(list == NULL || node == NULL)
+    return -1;
+
+  node->next = list->head;
+  list->head = node;
+
+  return 0;
+}
 LLNode* ll_find(const LinkedList* list, const void* key) {
   if(!list || !key)
     return NULL;
@@ -87,6 +99,18 @@ LLNode* ll_find(const LinkedList* list, const void* key) {
 }
 
 
+LLNode* ll_pop(LinkedList* list) {
+  if(!list || !list->head)
+    return NULL;
+
+  LLNode* res = list->head;
+
+  list->head = res->next;
+  // So the caller doesn't mess with the internals of the list
+  res->next = NULL;
+
+  return res;
+}
 
 
 

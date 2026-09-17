@@ -1,5 +1,6 @@
-#CCFLAGS = -fsanitize=address -fanalyzer -Wall -g -O0
-CCFLAGS = 
+CCFLAGS = -fsanitize=address -fanalyzer -Wall -g -pg -O0
+#CCFLAGS = -g -p
+
 BUILDDIR = build
 SRCDIR = src
 
@@ -27,6 +28,10 @@ $(MAIN_OBJS) $(TEST_OBJS) $(OBJS): $(BUILDDIR)/%.o: $(SRCDIR)/%.c
 
 run-test: test
 	./$(BUILDDIR)/test
+
+run-comparison: pairsofwords
+	cp build/pairsofwords tests/executables
+	python3 tests/test.py
 
 run: pairsofwords
 	./$(BUILDDIR)/pairsofwords $(ARGS)

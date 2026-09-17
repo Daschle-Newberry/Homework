@@ -87,7 +87,7 @@ void test_ht_insert() {
   puts("Testing ht_insert...");
   HashTable table;
 
-  ht_init(&table, &string_compare, &hash, &free, &free);
+  ht_init(&table, &string_compare, &hash, &free, &free, 256);
   
   int* v1 = malloc(sizeof(int));
   *v1 = 0;    

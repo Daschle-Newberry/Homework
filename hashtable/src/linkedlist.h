@@ -24,8 +24,8 @@ struct LLNode {
 /*
 * @brief Initializes a new linked list 
 * 
-* @param list The list to initialize
-* @param cmp A pointer to a comparison function
+* @param list     The list to initialize
+* @param cmp      A pointer to a comparison function
 * @param key_dstr A pointer to a destructor function for the keys
 * @param val_dstr A pointer to a destructor function for the values 
 *
@@ -56,7 +56,7 @@ LLNode* llnode_create(void* key, void* val);
 /*
 * @brief Destroys the given node 
 *
-* @param node The node to be destroyed
+* @param node     The node to be destroyed
 * @param key_dstr The destructor used for the key
 * @param val_dstr The destructor used for the value
 *
@@ -69,33 +69,45 @@ void llnode_destroy(LLNode* node, DstrFn key_dstr, DstrFn val_dstr);
  * @note Upon successful insertion, ownership of key and val is transferred to the list node
  *
  * @param head The head of the list
- * @param key The key for the node, assumed to be a pointer to a heap allocation
- * @param val The vaue for the node, assumed to be a poitner to a heap allocation
+ * @param key  The key for the node, assumed to be a pointer to a heap allocation
+ * @param val  The vaue for the node, assumed to be a poitner to a heap allocation
  * 
  * @return Whether the insertion was a success or failure
  * */
 int ll_insert(LinkedList* list, void* key, void* val);
 
 /*
+ * @brief Inserts the given node into the list
+ * 
+ * @note This method does search the list to check for duplicates
+ *
+ * @param list The list to splice into
+ * @param node The node to splic into
+ *
+ * @return 0 on successful splice, -1 otherwise
+ *
+ * */
+int ll_splice_node(LinkedList* list, LLNode* node);
+
+/*
  * @brief Finds the node with the given key
  *
  * @param list The list to serach
- * @param key The key for the node
+ * @param key  The key for the node
  *
  * @return The node with the given key, or NULL if the node doesn't exist
  * */
 LLNode* ll_find(const LinkedList* list, const void* key);
 
-
 /*
- * @brief Calculates the length of the given list
+ * @brief Pops the head of the list
  *
- * @note This is primarily used for testing within the scope fo this project
+ * @note The caller must free the popped node
  *
- * @param The list to find the length og
+ * @param list The list to pop from
  *
- * @returns Length
+ * @return The popped node
  * */
-size_t ll_len(const LinkedList* list);
+LLNode* ll_pop(LinkedList* list);
 #endif
 

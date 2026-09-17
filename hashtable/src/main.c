@@ -24,9 +24,7 @@ int static kv_compare(const void* a, const void* b) {
   return *(int*)p2->val - *(int*)p1->val;
 }
 
-int main(int argc, char **argv) {
-	// word pair counting logic using hash table goes here
-  
+int main(int argc, char **argv) {  
   // Argv lacks count, at least one file, or both
   if(argc < 2) { 
     fprintf(stderr, "pairsofwords: invalid set of arguments\n");
@@ -53,7 +51,7 @@ int main(int argc, char **argv) {
   }
 
   HashTable tb;
-  ht_init(&tb, &string_compare, &string_hash, &free, &free);
+  ht_init(&tb, &string_compare, &string_hash, &free, &free, 256);
   
   for(int i = first_file; i < argc; i++) {
     FILE* f = fopen(argv[i], "r");
@@ -91,8 +89,8 @@ int main(int argc, char **argv) {
 
   size_t num_eles;
   KVPair* kvp = ht_to_array(&tb, &num_eles);
-
   assert(kvp);
+
   qsort(kvp, num_eles, sizeof(KVPair), &kv_compare);
 
   size_t n = (count < num_eles) ? count : num_eles;
