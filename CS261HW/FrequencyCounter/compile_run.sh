@@ -1,0 +1,1 @@
+gcc -std=c11 -g -O0 -pedantic -Wall -fsanitize=address -Iinclude src/main.c -o FrequencyCounter && ./FrequencyCounter < litany.txt

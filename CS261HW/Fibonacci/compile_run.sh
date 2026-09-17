@@ -1,0 +1,1 @@
+gcc -std=c99 -Wall -pedantic src/test.c -o Fibonnaci && ./Fibonnaci  
