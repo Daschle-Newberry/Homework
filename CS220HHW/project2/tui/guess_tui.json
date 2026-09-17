@@ -1,0 +1,142 @@
+{
+    "info": [
+            {   
+                "type": "text",
+                "x" : ["center",0],
+                "y": ["exact",0],
+                "format": {"background": "", "foreground":"38;5;213"},
+                "visual": [
+    "  ____                       _____ _          ",
+    " / ___|_   _  ___  ___ ___  |_   _| |__   ___ ",
+    "| |  _| | | |/ _ \\/ __/ __|   | | | '_ \\ / _ \\",
+    "| |_| | |_| |  __/\\__ \\__ \\   | | | | | |  __/",
+    " \\____|\\__,_|\\___||___/___/   |_| |_| |_|\\___|",
+    "| \\ | |_   _ _ __ ___ | |__   ___ _ __        ",
+    "|  \\| | | | | '_ ` _ \\| '_ \\ / _ \\ '__|       ",
+    "| |\\  | |_| | | | | | | |_) |  __/ |          ",
+    "|_| \\_|\\__,_|_| |_| |_|_.__/ \\___|_|          "]
+            },
+            {
+                "type": "list",
+                "x": ["center",0],
+                "y": ["center",2],
+                "format": {"background": "", "foreground":"37"},
+                "args": ["name","bet"],
+                "maxRows": 8,
+                "visual": ["${name} is betting $${bet}"]
+            },
+            {
+                "type": "text",
+                "x": ["center",0],
+                "y": ["center",8],
+                "format": {"background": "48;5;231", "foreground":"38;5;213"},
+                "visual": ["Press Enter to Continue"]
+            }
+        ],
+    "game": [
+            {
+                "type": "text",
+                "x": ["center", 0],
+                "y": ["top",3],
+                "format": {"background": "", "foreground":"38;5;213"},
+                "visual": [
+                    "╭──────────────────────╮",
+                    "│                      │",
+                    "╰──────────────────────╯"
+                    ]
+
+            },
+            {
+                "type": "text",
+                "x": ["center", 0],
+                "y": ["top",4],
+                "format": {"background": "", "foreground":"37"},
+                "args": ["number"],
+                "maxRows": 1,
+                "visual": ["Secret Number: ${number}"]
+            },
+            {
+                "type": "list",
+                "x": ["center",0],
+                "y": ["center",0],
+                "format": {"background": "", "foreground":"37"},
+                "args": ["name","guess"],
+                "maxRows": 8,
+                "visual": ["${name} guessed ${guess}"]
+            },
+            {
+                "type": "text",
+                "x": ["center",0],
+                "y": ["center",8],
+                "format": {"background": "48;5;231", "foreground":"38;5;213"},
+                "visual": ["Press Enter to Continue"]
+            }
+        ],
+    "summary": [
+            {   
+                "type": "text",
+                "x" : ["center",0],
+                "y": ["exact",3],
+                "format": {"background": "", "foreground":"38;5;213"},
+                "visual": [
+" ____                    _  _        ",
+"|  _ \\  ___  ___  _   _ | || |_  ___ ",
+"| |_) |/ _ \\/ __|| | | || || __|/ __|",
+"|  _ <|  __/\\__ \\| |_| || || |_ \\__ \\",
+"|_| \\_\\\\___||___/ \\__,_||_| \\__||___/"]
+            },
+            {
+                "type": "list",
+                "x": ["center",0],
+                "y": ["center",2],
+                "format": {"background": "", "foreground":"37"},
+                "args": ["name","winning"],
+                "maxRows": 8,
+                "visual": ["${name} won $${winning}"]
+            },
+            {
+                "type": "text",
+                "x": ["center",0],
+                "y": ["center",8],
+                "format": {"background": "48;5;231", "foreground":"38;5;213"},
+                "visual": ["Press Enter to Continue"]
+            }
+        ],
+    "left": [
+            {
+                "type": "text",
+                "x": ["center", 0],
+                "y": ["exact",3],
+                "format": {"background": "", "foreground":"38;5;213"},
+                "visual": [
+                    "╭──────────────────────╮",
+                    "│                      │",
+                    "╰──────────────────────╯"
+                    ]
+
+            },
+            {   
+                "type": "text",
+                "x" : ["center",0],
+                "y": ["exact",4],
+                "format": {"background": "", "foreground":"38;5;213"},
+                "visual": ["Gamblers who left"]
+            },
+            {
+                "type": "list",
+                "x": ["center",0],
+                "y": ["center",-1],
+                "format": {"background": "", "foreground":"37"},
+                "args": ["left", "reason"],
+                "maxRows": 8,
+                "visual": ["${left} left because they ${reason}"]
+            },
+            {
+                "type": "text",
+                "x": ["center",0],
+                "y": ["center",8],
+                "format": {"background": "48;5;231", "foreground":"38;5;213"},
+                "visual": ["Press Enter to Continue"]
+            }
+        ]
+}
