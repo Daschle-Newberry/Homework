@@ -17,10 +17,7 @@ class MyBlob {
         this.size = size;
     }
 
-    public getMove(grid: (MyBlob | undefined)[][], h: number, w: number): [number, number] {   
-          if(this.size == 2 && this.x == 13) {
-              console.log(`${this.x}, ${this.y}`);
-            }             
+    public getMove(grid: (MyBlob | undefined)[][], h: number, w: number): [number, number] {           
         let radius: number = 0;
 
         let targets: MyBlob[] = [];
@@ -57,7 +54,16 @@ class MyBlob {
         return [stepX, stepY];
     }
 
-    private getRing(grid: (MyBlob | undefined)[][], x: number, y: number, radius: number, h: number, w: number): MyBlob[] {
+    public getX(): number { return this.x; }
+    public getY(): number { return this.y; }
+
+    public getSize(): number { return this.size; }
+    public addSize(delta: number) { this.size += delta; }
+
+    public setX(x: number): void { this.x =x; }
+    public setY(y: number): void { this.y =y; }
+
+        private getRing(grid: (MyBlob | undefined)[][], x: number, y: number, radius: number, h: number, w: number): MyBlob[] {
         const res: MyBlob[] = [];
 
         for(let dy = -radius; y <= radius; y++) {
@@ -75,18 +81,10 @@ class MyBlob {
 
         return res;
     }
+
     private isValidTarget(blob: MyBlob | undefined): boolean {
         return blob !== undefined && blob.getSize() < this.size;
     }
-    public getX(): number { return this.x; }
-    public getY(): number { return this.y; }
-
-    public getSize(): number { return this.size; }
-    public addSize(delta: number) { this.size += delta; }
-
-    public setX(x: number): void { this.x =x; }
-    public setY(y: number): void { this.y =y; }
-
 
 }
 
@@ -115,7 +113,6 @@ class Blobservation {
     public populate(blobs: {x: number, y: number, size: number}[]): void {
         for(const blob of blobs) {
             if(typeof blob.x !== 'number' || typeof blob.y !== 'number' || typeof blob.size !== 'number') throw new Error("Invalid blob argument");
-            console.log(`${blob.x}, ${blob.y}, ${blob.size}`);
 
             const current: MyBlob | undefined = this.grid[blob.y][blob.x];
             if(current == undefined) {
@@ -132,7 +129,6 @@ class Blobservation {
         if(typeof iters !== "number") throw new Error("Invalid argument type for move");
         if(iters <= 0) throw new Error(`Invalid amount of iterations ${iters}`);
 
-        console.log(`Num of iters: ${iters}`)
         while(iters > 0) {
             const moves: Map<MyBlob, {x: number, y: number}> = new Map();
 
@@ -171,8 +167,6 @@ class Blobservation {
             for(let x = 0; x < this.w; x++) {
                 const cell: MyBlob | undefined = this.grid[y][x];
                 const pos: String = cell == undefined ? "-" : cell.getSize().toString();
-
-                process.stdout.write(`${pos} `);
             }
             console.log();
         }
