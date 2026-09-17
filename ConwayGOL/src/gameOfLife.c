@@ -5,7 +5,7 @@
 #include "gameOfLife.h"
 #include "gameOfLifeOutput.h"
 
-
+// Mathematical mod
 #define MOD(a,n) ((a + n) % n)
 
 world_t* gol_init_world(unsigned short height, unsigned short width) {
@@ -53,15 +53,18 @@ world_t* gol_create_world(FILE* seed) {
         return NULL;
     }
 
+    // Write initial state to the world
     for(short int r = 0; r < rows; r++) {
-        char row[cols];
+        // Pointer to the start of each row
+        char* row = &world->board[r * world->width];
 
         char cell;
-
         short int c = 0;
+
+        // Col checking necessary for seed validation
         while(c < cols && (cell = fgetc(seed)) != EOF) {
             if(isspace(cell)) continue;
-            // if(!(cell == '.' || cell == '0')) break;
+            if(!(cell == '.' || cell == '0')) break;
 
             row[c] = (char) cell == '.' ? 0 : 1;
             c++;
@@ -72,8 +75,6 @@ world_t* gol_create_world(FILE* seed) {
             gol_free_world(world);
             return NULL;
         }
-
-        memcpy(&world->board[r * world->width], row, cols * sizeof(char));
     }
 
     return world;
@@ -85,6 +86,7 @@ static int get_num_neighbors(world_t* world,
                             )
     {
     int num_neighbors = 0;
+    // Search the moore neighborhood
     for(short int dy = -1; dy <= 1; dy++) {
         for(short int dx = -1; dx <= 1; dx++) {
             if(dy == 0 && dx == 0) continue;
@@ -92,12 +94,16 @@ static int get_num_neighbors(world_t* world,
             short int cell_y = y + dy;
             short int cell_x = x + dx;
 
+            // If wrapping not on and we exceed the bounds, continue
             if( !vertical_wrap && (cell_y < 0 || world->height - 1 < cell_y)) continue;
             if( !horizontal_wrap && (cell_x < 0 || world->width - 1 < cell_x)) continue;
 
+
+            // We will wrap even if not needed.
             cell_y = MOD(cell_y, world->height);
             cell_x = MOD(cell_x, world->width);
 
+            // 1D index from 2D index
             int idx = (cell_y * world->width) + cell_x;
             if(world->board[idx] == 1) num_neighbors++;
         }
@@ -107,7 +113,8 @@ static int get_num_neighbors(world_t* world,
 }
 
 static void write_out(golo_manager_t* manager, char* output_format, int gen) {
-    char output_name[strlen(output_format) + 10];
+    //11 extra characters should be enough to hold all possible digits in a 32bit integer plus an underscore (null terminator already included)
+    char output_name[strlen(output_format) + 11];
     snprintf(output_name, sizeof(output_name), "%s_%d", output_format, gen);
 
     FILE* gen_output = fopen(output_name,"w");
@@ -119,7 +126,7 @@ static inline void copy_to_manager(golo_manager_t* manager, world_t* world) {
     for(int i = 0; i < world->height; i++) golo_set_row(manager, i, &world->board[i * world->width]);
 }
 
-int gol_simulate(world_t* world, unsigned int count, int vertical_wrap, int horizontal_wrap, char* output_format) {
+int gol_simulate(world_t* world, int count, int vertical_wrap, int horizontal_wrap, char* output_format) {
     if(world == NULL) return 1;
 
     golo_manager_t* manager = golo_init(world->height, world->width);
@@ -128,13 +135,19 @@ int gol_simulate(world_t* world, unsigned int count, int vertical_wrap, int hori
         return 1;
     }
 
-    copy_to_manager(manager, world);
-    write_out(manager, output_format, 0);
+    int gen = 0;
 
-    unsigned int gen = 1;
-    while(gen <= count) {
+    do{
+        // Copy current world to the manager
+        copy_to_manager(manager, world);
+
+        //Write the manager to the output specified
+        write_out(manager, output_format, gen);
+
+        //Create a new blank world
         char new_world[world->height][world->width];
 
+        //Write new world based on old world
         for(short int y = 0; y < world->height; y++) {
             for(short int x = 0; x < world->width; x++) {
                 int num_neighbors = get_num_neighbors(
@@ -144,18 +157,17 @@ int gol_simulate(world_t* world, unsigned int count, int vertical_wrap, int hori
                             vertical_wrap,
                             horizontal_wrap
                             );
+                
                 if(num_neighbors < 2 || 3 < num_neighbors) new_world[y][x] = 0;
                 else if(num_neighbors == 3) new_world[y][x] = 1;
                 else new_world[y][x] = world->board[(y * world->width) + x];
             }
         }
+
+        //Copy new world to the board
         memcpy(world->board, new_world, sizeof(new_world));
-        copy_to_manager(manager, world);
-        write_out(manager, output_format, gen);
-
         gen++;
-    }
-
+    } while(gen <= count);
 
     golo_free(manager);
     return 0;

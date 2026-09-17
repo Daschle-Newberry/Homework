@@ -1,5 +1,5 @@
 CC = gcc
-CCFLAGS = -std=c99 -pedantic -Wall
+CCFLAGS = -std=c99 -pedantic -Wall -g -fsanitize=address
 CCDEBUGFLAGS = -g -fsanitize=address
 
 EXEC = gol
