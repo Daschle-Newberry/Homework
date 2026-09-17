@@ -1,0 +1,7 @@
+*
+!.gitignore
+!*/
+!Makefile
+!Datasets/*.txt
+!src/*.c
+!src/*.h

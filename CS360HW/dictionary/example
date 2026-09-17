@@ -1,0 +1,7 @@
+YOUTH:
+
+0 -> 9: 4 = elephant, greater
+5 -> 9: 7 = guppie, greater
+8->9: 8 = horse, greater
+9->9: 9 = mellow, greater
+10->9: end, last searched 9
