@@ -1,0 +1,122 @@
+/***********************************************************************
+name:
+	assignment4 -- acts as a pipe using ":" to seperate programs.
+description:	
+	See CS 360 Processes and Exec/Pipes lecture for helpful tips.
+***********************************************************************/
+
+/* Includes and definitions */
+#include <unistd.h>
+#include <string.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <stdio.h>
+#include <errno.h>
+
+/**********************************************************************
+./assignment4 <arg1> : <arg2>
+
+    Where: <arg1> and <arg2> are optional parameters that specify the programs
+    to be run. If <arg1> is specified but <arg2> is not, then <arg1> should be
+    run as though there was not a colon. Same for if <arg2> is specified but
+    <arg1> is not.
+**********************************************************************/
+typedef struct Process {
+  char* name;
+  int argc;
+  char* argv[];
+} Process;
+
+Process* process_create(char* name, int argc, char* argv[argc]) {
+  Process* proc = malloc(sizeof(Process) + (argc + 1) * sizeof(char*));
+
+  if(!proc)
+    return NULL;
+
+  proc->name = strdup(name);
+  proc->argc = argc;
+  for(int i = 0; i < proc->argc; i++)
+  { 
+    printf("%s \n", argv[i]);
+    proc->argv[i] = argv[i];
+    
+  }
+
+  argv[argc + 1] = NULL;
+
+  return proc;
+}
+
+int process_exec(Process* proc, int fdin, int fdout) {
+  if(!proc)
+    return -1;
+  
+  dup2(fdin, STDIN_FILENO);
+  dup2(fdout, STDOUT_FILENO);
+
+  execvp(proc->name, proc->argv);
+
+  return -errno;
+}
+
+void print_proc(Process* proc) {
+  if(!proc)
+    return;
+  
+  printf("Name: %s\n", proc->name);
+  for(int i = 0; i < proc->argc; i++) {
+    printf("    Arg: %s\n", proc->argv[i]);
+  }
+}
+
+int main(int argc, char *argv[]){
+  if(argc < 2) {
+    printf("Error: Usage: <proc1> : <proc>");
+    return -1;
+  }
+
+  int p_argc = 0;
+  for(; p_argc + 1 < argc && strcmp(argv[p_argc + 1], ":"); p_argc++);
+
+  int c_argc = argc - p_argc - 2;
+
+  if(p_argc == 0 && c_argc == 0)
+    return 0;
+
+  Process* parent = NULL;
+  Process* child = NULL;
+
+  if(p_argc) {
+    parent = process_create(argv[1], p_argc, argv + 1);
+  } 
+
+  if(c_argc) {
+    child = process_create(argv[p_argc + 2], c_argc, argv + p_argc + 2);
+
+    if(!parent) {
+      parent = child;
+      child = NULL;
+    }
+  }
+  
+  print_proc(parent);
+  print_proc(child);
+  
+
+  if(child == NULL) {
+    return process_exec(parent, STDIN_FILENO, STDOUT_FILENO);
+  }
+ 
+  int fd[2];
+  pipe(fd);
+
+  if(fork()) {
+    return process_exec(parent, STDIN_FILENO, fd[1]);
+  } else {
+    return process_exec(child, STDOUT_FILENO, fd[0]);
+  }
+
+  // p1 exists but p2 doesnt, p1 = p1, p2 = null
+	return 0;
+}

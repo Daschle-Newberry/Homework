@@ -1,0 +1,135 @@
+/***********************************************************************
+name:
+	assignment4 -- acts as a pipe using ":" to seperate programs.
+description:	
+	See CS 360 Processes and Exec/Pipes lecture for helpful tips.
+***********************************************************************/
+
+/* Includes and definitions */
+#include <unistd.h>
+#include <string.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <stdio.h>
+#include <errno.h>
+
+/**********************************************************************
+./assignment4 <arg1> : <arg2>
+
+    Where: <arg1> and <arg2> are optional parameters that specify the programs
+    to be run. If <arg1> is specified but <arg2> is not, then <arg1> should be
+    run as though there was not a colon. Same for if <arg2> is specified but
+    <arg1> is not.
+**********************************************************************/
+typedef struct Process {
+  char* name;
+  int argc;
+  char* argv[];
+} Process;
+
+Process* process_create(char* name, int argc, char* argv[argc]) {
+  Process* proc = malloc(sizeof(Process) + (argc + 1) * sizeof(char*));
+
+  if(!proc)
+    return NULL;
+
+  proc->name = strdup(name);
+
+  if(proc->name == NULL) {
+    free(proc);
+    return NULL;
+  }
+
+  proc->argc = argc;
+  for(int i = 0; i < proc->argc; i++)
+    proc->argv[i] = argv[i];
+    
+  proc->argv[argc] = NULL;
+
+  return proc;
+}
+
+void proc_destroy(Process* proc) {
+  free(proc->name);
+  free(proc);
+}
+
+int process_exec(Process* proc, int fdin, int fdout) {
+  if(!proc)
+    return -1;
+  
+  dup2(fdin, STDIN_FILENO);
+  dup2(fdout, STDOUT_FILENO);
+
+  execvp(proc->name, proc->argv);
+
+  return -errno;
+}
+
+int main(int argc, char *argv[]){
+  if(argc < 2) {
+    perror("Error: Usage: <proc1> : <proc>");
+    return -1;
+  }
+
+  int l_argc = 0;
+  for(; l_argc + 1 < argc && strcmp(argv[l_argc + 1], ":"); l_argc++);
+
+  int r_argc = argc - l_argc - 2;
+
+  if(r_argc == 0 && r_argc == 0)
+    return 0;
+
+  Process* left = NULL;
+  Process* right = NULL;
+
+  // There are left args
+  if(l_argc) {
+    left = process_create(argv[1], l_argc, argv + 1);
+    if(left == NULL)
+      goto error;
+  }
+
+  // There are right args
+  if(r_argc) {
+    right = process_create(argv[l_argc + 2], r_argc, argv + l_argc + 2);
+  
+    if(right == NULL)
+      goto error;
+  }
+  
+  // Only one set of args is present
+  if(!left || !right) {
+    Process* proc = left ? left : right;
+    
+    if(process_exec(proc, STDIN_FILENO, STDOUT_FILENO) == -1)
+      goto error;
+  }
+
+  int fd[2];
+  if(pipe(fd) == -1)
+    goto error;
+
+  pid_t pid = fork();
+
+  if(pid == -1)
+    goto error;
+
+  if(pid == 0) {
+    close(fd[0]);
+    if(process_exec(left, STDIN_FILENO, fd[1]) == -1)
+      goto error;
+  } else {
+    close(fd[1]);
+    if(process_exec(right, fd[0], STDOUT_FILENO) == -1)
+      goto error;
+  }
+
+error:
+  free(left);
+  free(right);
+  int err = errno;
+  perror(strerror(err));
+  return -err;
+}
