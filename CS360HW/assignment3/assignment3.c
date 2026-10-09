@@ -79,7 +79,3 @@ int readable(char* inputPath) {
   return readable_helper(inputPath);
 }
 
-
-
-
-
