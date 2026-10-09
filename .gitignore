@@ -1,0 +1,7 @@
+node_modules/
+dist/
+project2/utility/
+*.o
+*.dat
+*.data
+*.out
