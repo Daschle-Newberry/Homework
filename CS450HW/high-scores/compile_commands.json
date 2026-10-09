@@ -1,0 +1,19 @@
+[
+  {
+    "file": "high-scores.c",
+    "arguments": [
+      "/usr/bin/gcc",
+      "-std=c11",
+      "-Wall",
+      "-Wextra",
+      "-fsanitize=address",
+      "-g",
+      "-c",
+      "high-scores.c",
+      "-o",
+      "high-scores.o"
+    ],
+    "directory": "/home/daschle/Homework/CS450HW/high-scores",
+    "output": "high-scores.o"
+  }
+]
