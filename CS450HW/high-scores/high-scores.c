@@ -34,8 +34,10 @@ int i32vec_push_back(Int32Vector* vector, int32_t value);
 int i32_cmp(const void* a, const void* b);
 int i32vec_sort_std(Int32Vector* vector);
 int i32vec_sort_custom(Int32Vector* vector);
-void cnsort_min_max(size_t n, const int32_t data[n], int32_t res[2]);
 void cnsort(size_t n, int32_t data[n]);
+void cnsort_min_max(size_t n, const int32_t data[n], int32_t res[2]);
+void msort(size_t n, int32_t data[n]);
+void merge(size_t ln, size_t rn, int32_t left[ln], int32_t right[rn], int32_t out[ln + rn]);
 void i32vec_print(const Int32Vector* vector, char delim);
 void i32vec_destroy(Int32Vector* vector);
 
@@ -50,35 +52,42 @@ void print_lists(size_t n, const Int32Vector lists[n]);
 void destroy_lists(size_t n, Int32Vector lists[n]);
 
 int main(int argc, char** argv) {
-  clock_t start = clock();
   setvbuf(stdin, NULL, _IOFBF, 0x100000);
   setvbuf(stdout, NULL, _IOFBF, 0x100000); 
 
   Int32Vector lists[NUM_LISTS];
-  
+
+  // Create lists for all skills + total
   if(init_lists(NUM_LISTS, lists))
     nerr(1, "init_lists");
-
+  
+  // Fill skills with data from stdin
   if(populate_skills(NUM_SKILLS, lists))
     nerr(1, "populate_skills");
 
+  // Fill total by computing from skills lists
   if(compute_total(NUM_SKILLS, lists, &lists[NUM_SKILLS]))
     nerr(1, "compute_total");
-
+    
   char* mode = argc == 2 ? argv[1] : "standard";
   I32VectorSorter sorter = get_sorter(mode);
   
+  // clock_t start = clock();
+  
+  // Sort lists
   if(sort_lists(NUM_LISTS, lists, sorter))
     nerr(1, "sort_lists");
 
+  // clock_t end = clock();
+  // double time_elapsed = ((double)(end - start)) / CLOCKS_PER_SEC;
+  
+  // Print lists to stdout
   print_lists(NUM_LISTS, lists);
 
+  // Free lists
   destroy_lists(NUM_LISTS, lists);
 
-  clock_t end = clock();
-  double time_elapsed = ((double)(end - start)) / CLOCKS_PER_SEC;
-
-  fprintf(stderr, "%s took %f seconds to execute.\n", mode, time_elapsed);
+  //  fprintf(stderr, "%s took %f seconds to execute.\n", mode, time_elapsed);
   return 0;
 }
 
@@ -87,6 +96,7 @@ int i32_cmp(const void* a, const void* b) {
   return *(int32_t*)b - *(int32_t*)a;
 }
 
+// @brief Sorts a vector using qsort from stdlib.h
 int i32vec_sort_std(Int32Vector* vector) {
   if(!vector)
     return 1;
@@ -95,6 +105,7 @@ int i32vec_sort_std(Int32Vector* vector) {
   return 0;
 }
 
+// @brief Sorts a vector using a mix of counting sort and merge sort
 int i32vec_sort_custom(Int32Vector* vector) {
   int status = 0;
   size_t bottom_size = vector->len * XP_PROB;
@@ -119,30 +130,18 @@ int i32vec_sort_custom(Int32Vector* vector) {
   }
 
   cnsort(bottom.len, bottom.data);
-  if(i32vec_sort_std(&top)) {
-    status = 1;
-    goto end;
-  }
-  
-  for(size_t i = 0; i < top.len; i++) vector->data[i] = top.data[i];
-  for(size_t i = 0; i < bottom.len; i++) vector->data[i + top.len] = bottom.data[i];
+  msort(top.len, top.data);
 
+  memcpy(vector->data, top.data, top.len * sizeof(*top.data));
+  memcpy(vector->data + top.len, bottom.data, bottom.len * sizeof(*bottom.data));
+  
 end:
   i32vec_destroy(&bottom);
   i32vec_destroy(&top);
   return status;
 }
 
-void cnsort_min_max(size_t n, const int32_t data[n], int32_t res[2]) {
-  res[0] = data[0];
-  res[1] = data[0];
-
-  for(size_t i = 1; i < n; i++) {
-    res[0] = res[0] < data[i] ? res[0] : data[i];
-    res[1] = res[1] > data[i] ? res[1] : data[i];
-  }
-}
-
+// @brief Sorts an int32_t array using counting sort
 void cnsort(size_t n, int32_t data[n]) {
   int32_t minmax[2];
   cnsort_min_max(n, data, minmax);
@@ -163,12 +162,60 @@ void cnsort(size_t n, int32_t data[n]) {
   }
   // Fill
   size_t offset = 0;
-  for(int32_t i = 0; i < range; i++) {
+  for(int32_t i = range - 1; i >= 0; i--) {
     for(size_t j = 0; j < counts[i]; j++) {
       data[offset + j] = i + min;
     }
     offset += counts[i];
   } 
+}
+
+void cnsort_min_max(size_t n, const int32_t data[n], int32_t res[2]) {
+  res[0] = data[0];
+  res[1] = data[0];
+
+  for(size_t i = 1; i < n; i++) {
+    res[0] = res[0] < data[i] ? res[0] : data[i];
+    res[1] = res[1] > data[i] ? res[1] : data[i];
+  }
+}
+
+// @brief Sorts a int32_t array using merge sort
+void msort(size_t n, int32_t data[n]) {
+   if(n <= 1)
+     return;
+  
+   size_t ln = n / 2;
+   size_t rn = n - ln;
+
+   msort(ln, data);
+   msort(rn, data + ln);
+  
+   // RIP STACK if ln or rn is very large
+   // Optimize using a single preallocated buffer?
+   int32_t left[ln];
+   int32_t right[rn];
+    
+   memcpy(left, data, ln * sizeof(*left));
+   memcpy(right, data + ln, rn * sizeof(*right));
+   merge(ln, rn, left, right, data);
+}
+
+void merge(size_t ln, size_t rn, int32_t left[ln], int32_t right[rn], int32_t out[ln + rn]) {
+  size_t li = 0, ri = 0, idx = 0;
+  while(li < ln && ri < rn) {
+    if(left[li] > right[ri])
+      out[idx] = left[li++];
+    else 
+      out[idx] = right[ri++];
+    idx++;
+  }
+  
+  while(li < ln)
+    out[idx++] = left[li++];
+
+  while(ri < rn)
+    out[idx++] = right[ri++];
 }
 
 
@@ -309,7 +356,7 @@ void print_lists(size_t n, const Int32Vector lists[n]) {
   for(size_t i = 0; i < n; i++) {
     printf("%s\n", LIST_NAMES[i]);
     i32vec_print(&lists[i], '\n');
-    printf("\n");
+    if(i != n - 1)printf("\n");
   }
 }
 
