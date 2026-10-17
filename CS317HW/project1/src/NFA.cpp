@@ -51,30 +51,6 @@ NFA NFA::fromPostfix(const std::string& expression, const std::string& symbols) 
   return stack.top();
 }
 
-NFA NFA::fromSymbol(char symbol) {
-  NFA nfa;
-
-  size_t start = nfa.addState();
-  size_t accept = nfa.addState();
-
-  nfa.m_startState = start;
-  nfa.m_acceptState = accept;
-
-  nfa.addTransition(start, accept, symbol);
-
-  return nfa;
-} 
-
-NFA NFA::fromEpsilon() {
-  NFA nfa;
-
-  size_t start = nfa.addState();
-  nfa.m_startState = start;
-  nfa.m_acceptState = start;
-
-  return nfa;
-} 
-
 void NFA::unite(const NFA& other) {
   size_t offset = m_transitions.size();
   addStates(other.m_transitions);
@@ -135,6 +111,24 @@ std::ostream& operator<<(std::ostream& out, const NFA& nfa) {
   return out;
 }
 
+NFA NFA::fromSymbol(Symbol symbol) {
+  NFA nfa;
+
+  size_t start = nfa.addState();
+  size_t accept = nfa.addState();
+
+  nfa.m_startState = start;
+  nfa.m_acceptState = accept;
+
+  nfa.addTransition(start, accept, symbol);
+
+  return nfa;
+} 
+
+NFA NFA::fromEpsilon() {
+  return NFA::fromSymbol({});
+} 
+
 size_t NFA::addState() {
   m_transitions.push_back({});
   return m_transitions.size() - 1;
@@ -164,6 +158,7 @@ void NFA::addTransition(
   assert(destination < m_transitions.size());
 
   m_transitions[source].push_back({symbol, destination});
+  std::sort(m_transitions[source].begin(), m_transitions[source].end());
 } 
 
 

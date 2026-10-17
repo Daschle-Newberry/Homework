@@ -1,0 +1,211 @@
+RE: ab|
+Start: q5
+Accept: q6
+(q1, a) -> q2
+(q2, E) -> q6
+(q3, b) -> q4
+(q4, E) -> q6
+(q5, E) -> q1
+(q5, E) -> q3
+
+RE: aE|
+Start: q5
+Accept: q6
+(q1, a) -> q2
+(q2, E) -> q6
+(q3, E) -> q4
+(q4, E) -> q6
+(q5, E) -> q1
+(q5, E) -> q3
+
+RE: ab&
+Start: q1
+Accept: q4
+(q1, a) -> q2
+(q2, E) -> q3
+(q3, b) -> q4
+
+RE: a*
+Start: q3
+Accept: q3
+(q1, a) -> q2
+(q2, E) -> q3
+(q3, E) -> q1
+
+RE: ab|*
+Start: q7
+Accept: q7
+(q1, a) -> q2
+(q2, E) -> q6
+(q3, b) -> q4
+(q4, E) -> q6
+(q5, E) -> q1
+(q5, E) -> q3
+(q6, E) -> q7
+(q7, E) -> q5
+
+RE: a*b|
+Start: q6
+Accept: q7
+(q1, a) -> q2
+(q2, E) -> q3
+(q3, E) -> q1
+(q3, E) -> q7
+(q4, b) -> q5
+(q5, E) -> q7
+(q6, E) -> q3
+(q6, E) -> q4
+
+RE: ab|*b&
+Start: q7
+Accept: q9
+(q1, a) -> q2
+(q2, E) -> q6
+(q3, b) -> q4
+(q4, E) -> q6
+(q5, E) -> q1
+(q5, E) -> q3
+(q6, E) -> q7
+(q7, E) -> q5
+(q7, E) -> q8
+(q8, b) -> q9
+
+RE: ab&a*&ab|&b&
+Start: q1
+Accept: q15
+(q1, a) -> q2
+(q2, E) -> q3
+(q3, b) -> q4
+(q4, E) -> q7
+(q5, a) -> q6
+(q6, E) -> q7
+(q7, E) -> q5
+(q7, E) -> q12
+(q8, a) -> q9
+(q9, E) -> q13
+(q10, b) -> q11
+(q11, E) -> q13
+(q12, E) -> q8
+(q12, E) -> q10
+(q13, E) -> q14
+(q14, b) -> q15
+
+RE: ab|*a&b&a*&*ab|&ab|&
+Start: q15
+Accept: q27
+(q1, a) -> q2
+(q2, E) -> q6
+(q3, b) -> q4
+(q4, E) -> q6
+(q5, E) -> q1
+(q5, E) -> q3
+(q6, E) -> q7
+(q7, E) -> q5
+(q7, E) -> q8
+(q8, a) -> q9
+(q9, E) -> q10
+(q10, b) -> q11
+(q11, E) -> q14
+(q12, a) -> q13
+(q13, E) -> q14
+(q14, E) -> q12
+(q14, E) -> q15
+(q15, E) -> q7
+(q15, E) -> q20
+(q16, a) -> q17
+(q17, E) -> q21
+(q18, b) -> q19
+(q19, E) -> q21
+(q20, E) -> q16
+(q20, E) -> q18
+(q21, E) -> q26
+(q22, a) -> q23
+(q23, E) -> q27
+(q24, b) -> q25
+(q25, E) -> q27
+(q26, E) -> q22
+(q26, E) -> q24
+
+RE: ab&a*&ab|&*b&
+Start: q14
+Accept: q16
+(q1, a) -> q2
+(q2, E) -> q3
+(q3, b) -> q4
+(q4, E) -> q7
+(q5, a) -> q6
+(q6, E) -> q7
+(q7, E) -> q5
+(q7, E) -> q12
+(q8, a) -> q9
+(q9, E) -> q13
+(q10, b) -> q11
+(q11, E) -> q13
+(q12, E) -> q8
+(q12, E) -> q10
+(q13, E) -> q14
+(q14, E) -> q1
+(q14, E) -> q15
+(q15, b) -> q16
+
+RE: ab&a*&ab|&*b&*
+Start: q17
+Accept: q17
+(q1, a) -> q2
+(q2, E) -> q3
+(q3, b) -> q4
+(q4, E) -> q7
+(q5, a) -> q6
+(q6, E) -> q7
+(q7, E) -> q5
+(q7, E) -> q12
+(q8, a) -> q9
+(q9, E) -> q13
+(q10, b) -> q11
+(q11, E) -> q13
+(q12, E) -> q8
+(q12, E) -> q10
+(q13, E) -> q14
+(q14, E) -> q1
+(q14, E) -> q15
+(q15, b) -> q16
+(q16, E) -> q17
+(q17, E) -> q14
+
+RE: ab&a*&ab|&*b&*ab|*&b&
+Start: q17
+Accept: q26
+(q1, a) -> q2
+(q2, E) -> q3
+(q3, b) -> q4
+(q4, E) -> q7
+(q5, a) -> q6
+(q6, E) -> q7
+(q7, E) -> q5
+(q7, E) -> q12
+(q8, a) -> q9
+(q9, E) -> q13
+(q10, b) -> q11
+(q11, E) -> q13
+(q12, E) -> q8
+(q12, E) -> q10
+(q13, E) -> q14
+(q14, E) -> q1
+(q14, E) -> q15
+(q15, b) -> q16
+(q16, E) -> q17
+(q17, E) -> q14
+(q17, E) -> q24
+(q18, a) -> q19
+(q19, E) -> q23
+(q20, b) -> q21
+(q21, E) -> q23
+(q22, E) -> q18
+(q22, E) -> q20
+(q23, E) -> q24
+(q24, E) -> q22
+(q24, E) -> q25
+(q25, b) -> q26
+
+RE: 
+

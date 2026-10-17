@@ -40,14 +40,8 @@ private:
 public:
   /* @brief Creates an NFA from a postfix regular expression */
   static NFA fromPostfix(const std::string& expression, const std::string& symbols);
-
-  /* @brief Creates an NFA that accepts a single symbol */
-  static NFA fromSymbol(char symbol);
-
-  /* @brief Creates an NFA that accepts the empty string */
-  static NFA fromEpsilon();
-
-   /*  @brief Peforms union operation between the two NFAs
+  
+  /*  @brief Peforms union operation between the two NFAs
    *
    *  Unite modifies the current NFA to accept strings accepted by
    *  the NFA "other"
@@ -57,7 +51,6 @@ public:
    * */
   void unite(const NFA& other);
 
-    
   /*  @brief Peforms concatenation operation between the two NFAs
    *
    *  Concat modifies the current NFA to accept strings in the language
@@ -74,6 +67,12 @@ public:
 
 private:
   NFA() = default;
+
+  /* @brief Creates an NFA that accepts a single symbol */
+  static NFA fromSymbol(Symbol symbol);
+
+  /* @brief Creates an NFA that accepts the empty string */
+  static NFA fromEpsilon();
 
   /* Adds a state with no transitions to the NFA and returns the state id */
   size_t addState(); 

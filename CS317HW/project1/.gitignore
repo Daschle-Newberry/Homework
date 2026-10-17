@@ -1,7 +1,9 @@
 *
 
+
 !.gitignore
 !*/
+!*.md
 !CMakeLists.txt
 !src/
 !src/**
