@@ -13,7 +13,8 @@
 #include <string.h>
 #include <math.h>
 #define MAX(x,y) x < y ? y : x
-#define LOG32(n) (log(n) / log(3.0/2.0))
+#define ALPHA 3.0/2.0
+#define LOGa(n) (log(n) / log(ALPHA))
 
 typedef struct Int32Vector {
   size_t len;
@@ -281,7 +282,7 @@ SGTREE_ERR sg_insert(SGTree* tree, char* name, int32_t server_id, time_t ban_tim
     // BST insertion, uses array to keep track of parent references
     SGTreeNode* current_node = tree->root;
 
-    int max_path_length = ceil(LOG32(tree->q)) + 1;
+    int max_path_length = ceil(LOGa(tree->q)) + 1;
     SGTreeNode* path[max_path_length];
 
     int d = 0;
@@ -326,7 +327,7 @@ SGTREE_ERR sg_insert(SGTree* tree, char* name, int32_t server_id, time_t ban_tim
     tree->q = MAX(tree->q, tree->n);
     // Find the scapegoat if the tree is too deep
     //This should be a function... Or three...
-    if(d > LOG32(tree->q)) {
+    if(d > LOGa(tree->q)) {
         SGTreeNode* scapegoat = tree->root;
         int scapegoat_size = tree->n;
 
@@ -347,7 +348,7 @@ SGTREE_ERR sg_insert(SGTree* tree, char* name, int32_t server_id, time_t ban_tim
 
             parent_size += child_size + 1;
 
-            if(child_size > ((2.0/3.0) * parent_size)) {
+            if(child_size > ((1/(ALPHA)) * parent_size)) {
                 scapegoat = parent;
                 //Case for scapegoat at root
                 scapegoat_parent = (i > 0) ? path[i - 1] : NULL;
