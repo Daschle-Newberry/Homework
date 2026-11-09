@@ -1,0 +1,20 @@
+[
+  {
+    "file": "auto-loot.c",
+    "arguments": [
+      "/usr/bin/gcc",
+      "-std=c11",
+      "-O2",
+      "-fno-omit-frame-pointer",
+      "-Wall",
+      "-Wextra",
+      "-g",
+      "-c",
+      "auto-loot.c",
+      "-o",
+      "auto-loot.o"
+    ],
+    "directory": "/home/daschle/Homework/CS450HW/auto-loot",
+    "output": "auto-loot.o"
+  }
+]
