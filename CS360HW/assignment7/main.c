@@ -6,7 +6,9 @@
 #include "assignment7.h"
 
 int vstrcmp(const void* a, const void* b) {
-  return strcmp(a, b);
+    const char* sa = *(const char* const*)a;
+    const char* sb = *(const char* const*)b;
+    return strcmp(sa, sb);
 }
 
 static int tests_run = 0;
@@ -54,6 +56,15 @@ do { \
     }                                                                  \
 } while (0)
 
+int char_arr_eq(char** a, char** b, int n) {
+  for(int i = 0; i < n; i++) {
+    if(strcmp(a[i], b[i]) != 0)
+      return 0;
+  }
+
+  return 1;
+}
+
 int main(void) {
  int n = 0, cap = 1024, limit = 20000;
 
@@ -74,15 +85,17 @@ int main(void) {
   memcpy(c1, words, n * sizeof(*words));
   memcpy(c2, words, n * sizeof(words));
 
-  long e1;
-  long e2;
+  long qsort_time;
+  long sortThreaded_time;
 
-  BENCHMARK(qsort(c1,n,sizeof(char*), vstrcmp), e1);
-  BENCHMARK(sortThreaded(c2, n), e2);
-  
-  ASSERT_LT(e2, e1);
+  BENCHMARK(qsort(c1, n, sizeof(*c1), vstrcmp), qsort_time);
+  BENCHMARK(sortThreaded(c2, n), sortThreaded_time);
+    
+  if(!char_arr_eq(c1, c2, n)) {
+    printf(RED "FAIL" RESET ": array not sorted correctly.\n");
+  }
 
-
+  ASSERT_LT(sortThreaded_time, qsort_time);
   
   for(int i = 0; i < n; i++) {
     free(words[i]);
