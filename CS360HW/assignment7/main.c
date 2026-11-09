@@ -58,19 +58,44 @@ do { \
 
 int char_arr_eq(char** a, char** b, int n) {
   for(int i = 0; i < n; i++) {
-    if(strcmp(a[i], b[i]) != 0)
+    if(strcmp(a[i], b[i]) != 0) {
+      printf("%s != %s\n", a[i], b[i]);
       return 0;
+    }
   }
 
   return 1;
 }
 
+void test_sort(int n_threads, char** input, int n) {
+  printf("Testing with %d threads on %d words\n", n_threads, n);
+  setSortThreads(n_threads);
+  char** c1 = malloc(sizeof(*c1) * n);
+  char** c2 = malloc(sizeof(*c2) * n);
+  
+  memcpy(c1, input, n * sizeof(*input));
+  memcpy(c2, input, n * sizeof(input));
+
+  long qsort_time;
+  long sortThreaded_time;
+
+  BENCHMARK(qsort(c1, n, sizeof(*c1), vstrcmp), qsort_time);
+  BENCHMARK(sortThreaded(c2, n), sortThreaded_time);
+  
+  int is_sorted = char_arr_eq(c1, c2, n);
+
+  ASSERT(is_sorted == 1);
+  ASSERT_LT(sortThreaded_time, qsort_time);
+  free(c1);
+  free(c2);
+}
+
 int main(void) {
- int n = 0, cap = 1024, limit = 20000;
+   int n = 0, cap = 1024, limit = -1;
 
   char** words = malloc(cap * sizeof(*words));
   char buf[128];
-  while(n < limit && scanf("%127s\n", buf) == 1) {
+  while((n < limit || limit == -1) && scanf("%127s\n", buf) == 1) {
     if(n == cap) {
       cap *= 2;
       words = realloc(words, cap * sizeof(*words));
@@ -79,27 +104,17 @@ int main(void) {
     words[n++] = strdup(buf);
   }
 
-  char* c1[n];
-  char* c2[n];
-  
-  memcpy(c1, words, n * sizeof(*words));
-  memcpy(c2, words, n * sizeof(words));
 
-  long qsort_time;
-  long sortThreaded_time;
+  test_sort(1, words, n);
+  test_sort(2, words, n);
+  test_sort(4, words, n);
+  test_sort(8, words, n);
+  test_sort(16, words, n);
 
-  BENCHMARK(qsort(c1, n, sizeof(*c1), vstrcmp), qsort_time);
-  BENCHMARK(sortThreaded(c2, n), sortThreaded_time);
-    
-  if(!char_arr_eq(c1, c2, n)) {
-    printf(RED "FAIL" RESET ": array not sorted correctly.\n");
-  }
-
-  ASSERT_LT(sortThreaded_time, qsort_time);
-  
   for(int i = 0; i < n; i++) {
     free(words[i]);
   }
+
   free(words);
   return 1;
 }
